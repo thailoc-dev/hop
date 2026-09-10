@@ -14,6 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// warmFunc schedules the out-of-band container fetch. It is a variable so
+// tests can observe scheduling without spawning a process.
+var warmFunc = spawnWarm
+
 // completeHosts offers ssh config aliases matching what has been typed.
 func completeHosts(toComplete string) []string {
 	path, err := sshconfig.DefaultPath()
@@ -58,11 +62,25 @@ func completeTunnelArgs(_ *cobra.Command, args []string, toComplete string) ([]s
 		if !ok {
 			return nil, noFiles
 		}
+
+		warmed := false
+		containers := complete.Containers(context.Background(), executor, cache, args[0],
+			func(host string) { warmed = true; warmFunc(host) })
+
 		var out []string
-		for _, container := range complete.Containers(context.Background(), executor, cache, args[0], spawnWarm) {
+		for _, container := range containers {
 			if strings.HasPrefix(container.Name, toComplete) {
 				out = append(out, container.Name)
 			}
+		}
+
+		// A cold host answers nothing on the first press: a first ssh
+		// connection costs seconds and the ceiling is milliseconds. Say so.
+		// Silence here is indistinguishable from a broken host, and gets
+		// reported as one.
+		if warmed && len(out) == 0 {
+			out = cobra.AppendActiveHelp(out, fmt.Sprintf(
+				"fetching containers on %s — press Tab again in a moment", args[0]))
 		}
 		return out, noFiles
 
@@ -71,7 +89,7 @@ func completeTunnelArgs(_ *cobra.Command, args []string, toComplete string) ([]s
 		if !ok {
 			return nil, noFiles
 		}
-		for _, container := range complete.Containers(context.Background(), executor, cache, args[0], spawnWarm) {
+		for _, container := range complete.Containers(context.Background(), executor, cache, args[0], warmFunc) {
 			if container.Name != args[1] {
 				continue
 			}

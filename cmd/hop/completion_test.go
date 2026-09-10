@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/locnguyen/hop/internal/complete"
 	"github.com/locnguyen/hop/internal/control"
+	"github.com/locnguyen/hop/internal/hopfs"
 	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
 )
@@ -165,4 +167,22 @@ func completionLines(out string) []string {
 		lines = append(lines, strings.SplitN(line, "\t", 2)[0])
 	}
 	return lines
+}
+
+// seedCache writes a completion cache entry directly, standing in for a
+// background fetch that has already completed.
+func seedCache(t *testing.T, home, host string, names ...string) {
+	t.Helper()
+	paths := hopfs.New(home, 501)
+	if err := paths.EnsureDirs(); err != nil {
+		t.Fatalf("EnsureDirs: %v", err)
+	}
+	containers := make([]complete.Container, len(names))
+	for i, name := range names {
+		containers[i] = complete.Container{Name: name, Ports: []int{3000}}
+	}
+	cache := &complete.Cache{Dir: paths.CacheDir, TTL: complete.CacheTTL}
+	if err := cache.Put(host, containers); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
 }

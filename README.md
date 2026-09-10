@@ -74,12 +74,22 @@ returns immediately with nothing rather than hanging the shell. On timeout an
 expired cache entry is served in preference to nothing: a minute-old container
 list is almost always still right, and being wrong costs one keystroke.
 
-**The first Tab on a host you have not completed recently returns nothing.**
+**The first Tab on a host you have not completed recently shows a message
+rather than containers:**
+
+```
+$ hop example-webapp-dev <TAB>
+fetching containers on example-webapp-dev — press Tab again in a moment
+```
+
 A first ssh connection costs seconds — TCP, key exchange and authentication
 before docker even runs — which no 300 ms ceiling can accommodate. That press
-schedules a detached `hop __warm` to fetch the list out of band, so the next
-press is instant. Without it the cache could never fill and completion would
-fail on every press forever.
+schedules a detached `hop __warm` to fetch the list out of band; press Tab
+again a moment later and it is instant. Without the background fetch the cache
+could never fill and completion would fail on every press forever.
+
+The message matters as much as the mechanism: an empty completion list is
+indistinguishable from a broken host, and gets reported as one.
 
 ## How it works
 
