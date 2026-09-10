@@ -1,8 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"os"
+	"text/tabwriter"
+	"time"
 
+	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -62,4 +67,52 @@ func envLabel(cmd *cobra.Command, env string) string {
 		env = "—"
 	}
 	return paint(env, colourFor(env), useColour(cmd))
+}
+
+// shortDuration formats an age the way a person reads it at a glance.
+func shortDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		return fmt.Sprintf("%dd%dh", int(d.Hours())/24, int(d.Hours())%24)
+	}
+}
+
+func renderTable(w io.Writer, statuses []tunnel.Status, colour bool) {
+	if len(statuses) == 0 {
+		fmt.Fprintln(w, "no tunnels")
+		return
+	}
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "LOCAL\tENV\tHOST\tCONTAINER\tREMOTE\tSTATE\tSINCE\tRETRIES")
+
+	for _, st := range statuses {
+		env := st.Spec.Env
+		if env == "" {
+			env = "\u2014"
+		}
+
+		since := "\u2014"
+		if st.State == tunnel.StateHealthy && !st.Since.IsZero() {
+			since = shortDuration(time.Since(st.Since))
+		}
+
+		state := string(st.State)
+		if st.State == tunnel.StateRetrying && st.LastError != "" {
+			state = paint(state, ansiDim, colour)
+		}
+
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%s\t%s\t%d\n",
+			st.Spec.LocalPort,
+			paint(env, colourFor(st.Spec.Env), colour),
+			st.Spec.Host, st.Spec.Container, st.Spec.RemotePort,
+			state, since, st.Retries)
+	}
+	_ = tw.Flush()
 }
