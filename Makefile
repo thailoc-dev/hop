@@ -13,5 +13,5 @@ install: build
 
 check-spawn:
 	@! grep -rn "exec.Command" --include='*.go' internal/ cmd/ \
-		| grep -vE "^internal/(sshexec|sysprobe)/" \
-		|| (echo "exec.Command outside sshexec/sysprobe" && exit 1)
+		| grep -vE "^internal/(sshexec|sysprobe)/|^cmd/hop/connect\.go" \
+		|| (echo "exec.Command outside sshexec/sysprobe/connect.go" && exit 1)

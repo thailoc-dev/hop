@@ -14,5 +14,6 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolP("quiet", "q", false, "suppress non-error output")
 
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newDaemonCmd())
 	return root
 }
