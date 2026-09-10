@@ -40,12 +40,12 @@ func TestCompleteHostsReadsSSHConfig(t *testing.T) {
 func TestCompleteHostsFiltersByPrefix(t *testing.T) {
 	home := shortTempDir(t)
 	t.Setenv("HOME", home)
-	writeSSHConfig(t, home, "Host example-backend-dev\nHost example-api\n")
+	writeSSHConfig(t, home, "Host example-backend-dev\nHost other-api\n")
 
-	got := completeHosts("air")
+	got := completeHosts("example")
 
 	if len(got) != 1 || got[0] != "example-backend-dev" {
-		t.Fatalf("got %v, want only the air- prefix match", got)
+		t.Fatalf("got %v, want only the example- prefix match", got)
 	}
 }
 
