@@ -251,24 +251,28 @@ tunnel serves.
 
 ## Architecture
 
-Five packages. The dependency rule that makes the whole thing testable:
+Eight packages. The dependency rule that makes the whole thing testable:
 **process spawning is confined to `internal/sshexec` and `internal/sysprobe`,
-and both sit behind interfaces with fake implementations.** No other package
-may call `exec.Command`.
+plus `cmd/hop/connect.go` where hop re-executes itself as a daemon.** Nothing
+else may call `exec.Command`, and both `internal` packages sit behind
+interfaces with fake implementations.
 
 | Package | Responsibility |
 |---|---|
 | `internal/sshexec` | Spawns `ssh`. Exposes an `Executor` interface and a `Fake` implementation. Owns ControlMaster sockets for command connections. |
-| `internal/sysprobe` | Spawns `lsof` (who holds a local port) and `route` (current default gateway). Interface plus fake, for the same reason. |
+| `internal/sysprobe` | Spawns `lsof` (who holds a local port), `route` (default gateway), and signals orphaned processes. Interface plus fake, for the same reason. |
 | `internal/tunnel` | Per-tunnel state machine, classification, backoff. Pure logic over an injected `Executor` and `Clock`. No I/O of its own. |
-| `internal/supervisor` | Owns the set of tunnels, the control socket, the state file, sleep/network detection. |
+| `internal/store` | The state file, written atomically. |
+| `internal/control` | Client and server for the control socket. |
+| `internal/hopfs` | Every path hop reads or writes, including the socket-length fallback. |
+| `internal/supervisor` | Owns the set of tunnels, orphan reaping, sleep and network detection. |
 | `cmd/hop` | Argument parsing, output rendering, daemon auto-spawn. Thin. |
 
 To verify the rule still holds:
 
 ```bash
 grep -rn "exec.Command" --include='*.go' internal/ cmd/ \
-  | grep -vE "^internal/(sshexec|sysprobe)/"
+  | grep -vE "^internal/(sshexec|sysprobe)/|^cmd/hop/connect\.go"
 ```
 
 ### Process model
@@ -289,13 +293,21 @@ an intermediate socket with a 17-byte random suffix while establishing a
 master, leaving a usable budget of 86. If `~/.hop/ctl/` would exceed it, the
 socket directory falls back to `/tmp/hop-<uid>/`.
 
-Children are spawned in the supervisor's own process group, and the group is
-killed on shutdown. On startup the supervisor kills any orphaned ssh process
-whose command line references its own socket directory, then reconciles from
-the state file. Orphan detection matches the socket directory, not
-`pgrep -f 'ssh -o ControlMaster'` — once `ControlPersist` backgrounds a master,
-ssh renames the process to `ssh: <socket> [mux]` and that pattern reports clean
-while masters are still alive.
+Children are spawned in their own process group, and the group is signalled on
+shutdown so nothing ssh started outlives it.
+
+A daemon that is killed rather than shut down leaves its forwards behind, still
+holding their local ports. On startup the supervisor therefore closes any
+leftover ControlMaster sockets and then, for each tunnel in its state file,
+checks whether an `ssh` process holds that local port and kills it if so. The
+check is deliberately narrow — only ports hop already owns, only processes
+named `ssh` — so a local database on the same port is reported as a conflict
+rather than killed.
+
+Orphans are found by port ownership rather than by matching a command line.
+`pgrep -f 'ssh -o ControlMaster'` would be wrong: once `ControlPersist`
+backgrounds a master, ssh renames the process to `ssh: <socket> [mux]`, so that
+pattern reports clean while masters are still alive.
 
 ### Daemon lifecycle
 
@@ -317,17 +329,19 @@ daemon, and exits when its last tunnel is removed. There is nothing to install.
 ├── state.json        tunnel specs + desired state, written atomically
 ├── ctl.sock          control socket
 ├── daemon.lock       spawn lock
-├── daemon.log        supervisor log
-├── ctl/              ControlMaster sockets for command connections
-└── logs/<port>.log   per-tunnel event log, read by `hop logs`
+├── daemon.log        supervisor log, rotated at 5 MB (one generation kept)
+└── ctl/              ControlMaster sockets for command connections
 ```
 
 `state.json` is written to a temp file and renamed, so a crash mid-write cannot
 corrupt it. Each tunnel record carries an `autostart` boolean, reserved for
 launchd support and currently always false.
 
-Per-tunnel events are also kept in a 200-entry in-memory ring buffer so
-`hop logs -f` can replay recent history before streaming.
+Per-tunnel events live in a 200-entry in-memory ring inside the daemon, which
+`hop logs` reads over the control socket. They are deliberately not written to
+disk: the daemon exits when its last tunnel stops, and the state transitions of
+a tunnel that no longer exists are of no use to anyone. Anything worth keeping
+past that point belongs in `daemon.log`.
 
 ## Testing
 
