@@ -23,6 +23,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().Bool("no-color", false, "disable colour")
 	root.PersistentFlags().BoolP("quiet", "q", false, "suppress non-error output")
 	addTunnelFlags(root)
+	root.ValidArgsFunction = completeTunnelArgs
 
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newDaemonCmd())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Fake is an Executor that spawns nothing. Tests drive it to reproduce
@@ -17,6 +18,7 @@ type Fake struct {
 	forwards  []ForwardSpec
 	procs     []*FakeProc
 	startErr  error
+	runDelay  time.Duration
 }
 
 func NewFake() *Fake {
@@ -66,10 +68,27 @@ func (f *Fake) ContainerIP(_ context.Context, host, container string) (string, e
 	return ip, nil
 }
 
-func (f *Fake) Run(_ context.Context, _ string, _ ...string) (Result, error) {
+// SetRunDelay makes Run block for d before returning, so completion timeouts
+// can be tested without an unreachable host.
+func (f *Fake) SetRunDelay(d time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.runResult, f.runErr
+	f.runDelay = d
+}
+
+func (f *Fake) Run(ctx context.Context, _ string, _ ...string) (Result, error) {
+	f.mu.Lock()
+	delay, result, err := f.runDelay, f.runResult, f.runErr
+	f.mu.Unlock()
+
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		}
+	}
+	return result, err
 }
 
 func (f *Fake) StartForward(_ context.Context, spec ForwardSpec) (Proc, error) {

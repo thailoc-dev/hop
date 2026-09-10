@@ -212,10 +212,11 @@ func attachTunnel(cmd *cobra.Command, paths hopfs.Paths, localPort int) error {
 
 func newTunnelCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "tunnel <host> <container> <remote-port> <local-port>",
-		Short: "Open a supervised tunnel (explicit form of the bare command)",
-		Args:  cobra.ExactArgs(4),
-		RunE:  openTunnel,
+		Use:               "tunnel <host> <container> <remote-port> <local-port>",
+		Short:             "Open a supervised tunnel (explicit form of the bare command)",
+		Args:              cobra.ExactArgs(4),
+		RunE:              openTunnel,
+		ValidArgsFunction: completeTunnelArgs,
 	}
 	addTunnelFlags(cmd)
 	return cmd
@@ -227,4 +228,9 @@ func addTunnelFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("env", "e", "", "environment label (dev, stg, prod); inferred when omitted")
 	cmd.Flags().Duration("wait", 10*time.Second, "how long to wait for the tunnel to become healthy")
 	cmd.Flags().BoolP("attach", "a", false, "stay in the foreground and stream state changes")
+
+	_ = cmd.RegisterFlagCompletionFunc("env",
+		func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+			return []string{"dev", "stg", "prod"}, cobra.ShellCompDirectiveNoFileComp
+		})
 }

@@ -8,9 +8,10 @@ import (
 
 func newRestartCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "restart <local-port>",
-		Short: "Rebuild a tunnel, re-resolving the container address",
-		Args:  cobra.ExactArgs(1),
+		ValidArgsFunction: completeLocalPorts,
+		Use:               "restart <local-port>",
+		Short:             "Rebuild a tunnel, re-resolving the container address",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			port, err := parsePort(args[0], "local-port")
 			if err != nil {

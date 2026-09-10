@@ -57,6 +57,23 @@ several times a day gets dismissed reflexively; the failure that actually
 matters is believing a `localhost` session is staging when it is production,
 and that is fixed by making it obvious, not by asking.
 
+## Completion
+
+```bash
+hop completion zsh > "${fpath[1]}/_hop"   # then restart the shell
+```
+
+`bash` and `fish` are also supported. Completion covers hosts (from
+`~/.ssh/config`), container names and their ports (from `docker ps` on the
+host), and the local ports of running tunnels for `down`, `logs` and
+`restart` — each annotated with its environment and container.
+
+Network-backed completions are bounded by a 300 ms timeout and cached for a
+minute under `~/.hop/cache/`, so pressing Tab against an unreachable host
+returns immediately with nothing rather than hanging the shell. On timeout an
+expired cache entry is served in preference to nothing: a minute-old container
+list is almost always still right, and being wrong costs one keystroke.
+
 ## How it works
 
 The first `hop` command auto-spawns a background supervisor and talks to it

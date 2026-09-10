@@ -48,6 +48,7 @@ func newDownCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.ValidArgsFunction = completeLocalPorts
 	cmd.Flags().Bool("all", false, "stop every tunnel")
 	return cmd
 }
