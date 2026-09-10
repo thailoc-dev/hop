@@ -46,7 +46,9 @@ Explicitly out of scope for this version, listed so the boundary is not
 relitigated during implementation:
 
 - Named services / alias config files.
-- Host inventory, `info`, `ps`, remote docker operations, file transfer.
+- Host inventory, `info`, `ps`, remote docker operations, file transfer. The
+  container listing that feeds tab completion is not an inventory feature: it
+  is never displayed, only offered as completion candidates.
 - Reboot persistence via launchd. The state file reserves an `autostart`
   field so this can be added without rework, but nothing reads it yet.
 - Provisioning, config management, cloud-provider APIs.
@@ -107,6 +109,32 @@ hop docker-ip <host> <container>        print the container's IP
 
 Anything beyond this — inventory, remote docker operations, rsync-backed
 transfer — stays out of scope and is a later version's problem.
+
+### Completion
+
+```
+hop completion zsh | bash | fish
+```
+
+Completion is position-aware across the bare form: host names at position 0,
+container names at 1, that container's ports at 2, and the remote port
+mirrored as a suggestion at 3. `down`, `logs` and `restart` complete the local
+ports of running tunnels, each annotated with its environment and container so
+the right one is recognisable without recalling the number.
+
+Hosts come from `~/.ssh/config`, read and never written, with `Include`
+followed and patterns (`Host *`, `web-*`, `!nope`) excluded — none of them can
+be typed as an argument. Container names and ports come from `docker ps` on
+the host.
+
+Two rules govern the network-backed half, because a shell that freezes on Tab
+is worse than one that completes nothing:
+
+1. **A 300 ms hard ceiling.** Enough for a multiplexed connection to a
+   reachable host, short enough to feel instant when the host is not there.
+2. **A 60-second cache** under `~/.hop/cache/`, one entry per host. On timeout
+   the cache is served even when expired: a slightly stale completion beats an
+   empty one, and the cost of being wrong is one keystroke.
 
 ### Addressing tunnels
 
@@ -251,7 +279,7 @@ tunnel serves.
 
 ## Architecture
 
-Eight packages. The dependency rule that makes the whole thing testable:
+Ten packages. The dependency rule that makes the whole thing testable:
 **process spawning is confined to `internal/sshexec` and `internal/sysprobe`,
 plus `cmd/hop/connect.go` where hop re-executes itself as a daemon.** Nothing
 else may call `exec.Command`, and both `internal` packages sit behind
@@ -265,6 +293,8 @@ interfaces with fake implementations.
 | `internal/store` | The state file, written atomically. |
 | `internal/control` | Client and server for the control socket. |
 | `internal/hopfs` | Every path hop reads or writes, including the socket-length fallback. |
+| `internal/sshconfig` | Read-only `~/.ssh/config` alias parser, for completion. |
+| `internal/complete` | Completion data: `docker ps` parsing, the timeout, the cache. |
 | `internal/supervisor` | Owns the set of tunnels, orphan reaping, sleep and network detection. |
 | `cmd/hop` | Argument parsing, output rendering, daemon auto-spawn. Thin. |
 
@@ -330,7 +360,8 @@ daemon, and exits when its last tunnel is removed. There is nothing to install.
 ├── ctl.sock          control socket
 ├── daemon.lock       spawn lock
 ├── daemon.log        supervisor log, rotated at 5 MB (one generation kept)
-└── ctl/              ControlMaster sockets for command connections
+├── ctl/              ControlMaster sockets for command connections
+└── cache/            container listings for completion, one file per host
 ```
 
 `state.json` is written to a temp file and renamed, so a crash mid-write cannot
@@ -372,8 +403,8 @@ hermetically — no VPS, no network, no real sleeping.
 ## Dependencies
 
 Module path `github.com/locnguyen/hop`, Go 1.25+.
-`github.com/spf13/cobra` for the command tree, help text, and the
-completion scaffolding a later version will want. Everything else is standard
+`github.com/spf13/cobra` for the command tree, help text, and the completion
+scripts. Everything else is standard
 library: `text/tabwriter` for tables, a small internal ANSI helper for colour,
 `encoding/json` for the control protocol and state file.
 
