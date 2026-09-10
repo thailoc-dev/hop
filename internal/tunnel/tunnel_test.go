@@ -31,6 +31,7 @@ func newHarness(t *testing.T) *harness {
 	ex := sshexec.NewFake()
 	ex.SetContainerIP("example-backend-dev", "app_mongo_staging", "172.18.0.4")
 	pr := sysprobe.NewFake()
+	bindsOnStart(ex, pr)
 	clk := NewFakeClock(time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC))
 
 	tun := New(testSpec(), Deps{Exec: ex, Probe: pr, Clock: clk, Seed: 1})
@@ -185,10 +186,12 @@ func TestBusyLocalPortFailsFastAndNamesTheHolder(t *testing.T) {
 func TestMissingContainerRetriesIndefinitely(t *testing.T) {
 	ex := sshexec.NewFake()
 	ex.SetContainerErr("h", "c", errors.New("Error: No such object: c"))
+	pr := sysprobe.NewFake()
+	bindsOnStart(ex, pr)
 	clk := NewFakeClock(time.Now())
 
 	tun := New(Spec{Host: "h", Container: "c", RemotePort: 1, LocalPort: 2},
-		Deps{Exec: ex, Probe: sysprobe.NewFake(), Clock: clk, Seed: 1})
+		Deps{Exec: ex, Probe: pr, Clock: clk, Seed: 1})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -290,5 +293,89 @@ func TestEventsRecordEveryTransition(t *testing.T) {
 	}
 	if events[len(events)-1].State != StateHealthy {
 		t.Fatalf("last event = %v, want healthy", events[len(events)-1].State)
+	}
+}
+
+// bindsOnStart makes the fake pair behave like real ssh: the local port is
+// free until the forward starts, then bound.
+func bindsOnStart(ex *sshexec.Fake, pr *sysprobe.Fake) {
+	ex.SetOnStartForward(func(spec sshexec.ForwardSpec) {
+		pr.SetPortBusy(spec.LocalPort, sysprobe.Holder{Command: "ssh", PID: 1})
+
+		// ...and releases it when the process exits, so the next attempt's
+		// pre-flight check sees a free port rather than a conflict.
+		proc := ex.LastForward()
+		go func() {
+			<-proc.Done()
+			pr.SetPortFree(spec.LocalPort)
+		}()
+	})
+}
+
+// The regression test for a tunnel that reports healthy before ssh has bound
+// the local port: `hop ls` then probes a port nothing is listening on, marks
+// the tunnel degraded and recycles it, forever.
+func TestHealthyWaitsForTheLocalPortToBind(t *testing.T) {
+	ex := sshexec.NewFake()
+	ex.SetContainerIP("h", "c", "172.18.0.4")
+	pr := sysprobe.NewFake()
+	clk := NewFakeClock(time.Now())
+
+	// Deliberately do NOT bind on start: ssh is still connecting.
+	tun := New(Spec{Host: "h", Container: "c", RemotePort: 27017, LocalPort: 27018},
+		Deps{Exec: ex, Probe: pr, Clock: clk, Seed: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go tun.Run(ctx)
+
+	// Wait for the forward to have been started.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(ex.Forwards()) == 0 {
+		time.Sleep(time.Millisecond)
+	}
+
+	// The port is not bound, so the tunnel must not claim to be healthy.
+	time.Sleep(30 * time.Millisecond)
+	if got := tun.Status().State; got == StateHealthy {
+		t.Fatal("reported healthy while the local port was still unbound; " +
+			"the ls probe would immediately mark this degraded and recycle it")
+	}
+
+	// Once ssh binds the port, it becomes healthy.
+	pr.SetPortBusy(27018, sysprobe.Holder{Command: "ssh", PID: 1})
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && tun.Status().State != StateHealthy {
+		clk.Advance(bindPollInterval)
+		time.Sleep(time.Millisecond)
+	}
+	if got := tun.Status().State; got != StateHealthy {
+		t.Fatalf("state = %v, want healthy once the port was bound", got)
+	}
+}
+
+func TestForwardThatNeverBindsIsRetried(t *testing.T) {
+	ex := sshexec.NewFake()
+	ex.SetContainerIP("h", "c", "172.18.0.4")
+	pr := sysprobe.NewFake()
+	clk := NewFakeClock(time.Now())
+
+	tun := New(Spec{Host: "h", Container: "c", RemotePort: 27017, LocalPort: 27018},
+		Deps{Exec: ex, Probe: pr, Clock: clk, Seed: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go tun.Run(ctx)
+
+	// Push past the bind deadline without ever binding.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && len(ex.Forwards()) < 2 {
+		clk.Advance(bindPollInterval)
+		time.Sleep(time.Millisecond)
+	}
+
+	if len(ex.Forwards()) < 2 {
+		t.Fatal("a forward that never bound was never retried")
+	}
+	if first := ex.LastForward(); first == nil {
+		t.Fatal("no forward recorded")
 	}
 }

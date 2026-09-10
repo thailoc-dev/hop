@@ -16,6 +16,7 @@ func newWatchSup(t *testing.T) (*Supervisor, *sshexec.Fake, *sysprobe.Fake, *tun
 	ex := sshexec.NewFake()
 	ex.SetContainerIP("h", "c", "172.18.0.4")
 	pr := sysprobe.NewFake()
+	bindsOnStart(ex, pr)
 	pr.SetDefaultRoute("192.168.1.1")
 	clk := tunnel.NewFakeClock(time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC))
 
@@ -123,6 +124,7 @@ func TestWatchStopsWithTheSupervisor(t *testing.T) {
 	ex := sshexec.NewFake()
 	ex.SetContainerIP("h", "c", "1.2.3.4")
 	pr := sysprobe.NewFake()
+	bindsOnStart(ex, pr)
 	clk := tunnel.NewFakeClock(time.Now())
 	s := New(Config{StatePath: filepath.Join(t.TempDir(), "state.json"), Exec: ex, Probe: pr, Clock: clk})
 

@@ -151,3 +151,25 @@ func spawnDaemon(paths hopfs.Paths) error {
 	// The daemon is not this process's business once started.
 	return cmd.Process.Release()
 }
+
+// spawnWarm re-executes hop to fill the completion cache for a host, detached
+// so it outlives the completion process that scheduled it.
+//
+// Completion cannot do this work inline: a first ssh connection costs seconds
+// and the completion ceiling is 300ms. Handing it to a background process is
+// what lets the cache bootstrap without ever making Tab wait.
+func spawnWarm(host string) {
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+
+	cmd := exec.Command(self, "__warm", host)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	_ = cmd.Process.Release()
+}

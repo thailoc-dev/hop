@@ -27,7 +27,7 @@ func requireVPS(t *testing.T) (host, container string, remotePort int) {
 
 func TestIntegrationContainerIPResolves(t *testing.T) {
 	host, container, _ := requireVPS(t)
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 	defer e.Close(context.Background())
 
 	ip, err := e.ContainerIP(context.Background(), host, container)
@@ -41,7 +41,7 @@ func TestIntegrationContainerIPResolves(t *testing.T) {
 
 func TestIntegrationForwardAcceptsAConnection(t *testing.T) {
 	host, container, remotePort := requireVPS(t)
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 	defer e.Close(context.Background())
 
 	ip, err := e.ContainerIP(context.Background(), host, container)

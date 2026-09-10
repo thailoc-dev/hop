@@ -75,6 +75,24 @@ func TestCommandArgsSocketNameIsStablePerHost(t *testing.T) {
 	}
 }
 
+// shortTempDir returns a temp directory with a short path.
+//
+// ControlMaster sockets live in these directories, and t.TempDir() embeds the
+// test name — long enough here to blow ssh's 104-byte ControlPath limit.
+// Anything used as a socket directory must come from this helper.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	// "/tmp" explicitly, not TMPDIR: on macOS TMPDIR is itself ~48 bytes,
+	// which leaves too little of the 104-byte sun_path budget for a socket
+	// name plus the 17-byte suffix ssh appends while binding a ControlMaster.
+	dir, err := os.MkdirTemp("/tmp", "hop")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 // withStubSSH puts a fake ssh first on PATH and returns the file it logs
 // its argv to.
 func withStubSSH(t *testing.T, script string) string {
@@ -93,7 +111,7 @@ func withStubSSH(t *testing.T, script string) string {
 
 func TestContainerIPTrimsWhitespace(t *testing.T) {
 	withStubSSH(t, "echo '  172.18.0.4  '\n")
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 
 	got, err := e.ContainerIP(context.Background(), "h", "mongo")
 	if err != nil {
@@ -106,7 +124,7 @@ func TestContainerIPTrimsWhitespace(t *testing.T) {
 
 func TestContainerIPRejectsEmptyOutput(t *testing.T) {
 	withStubSSH(t, "echo ''\n")
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 
 	_, err := e.ContainerIP(context.Background(), "h", "mongo")
 	if err == nil {
@@ -119,7 +137,7 @@ func TestContainerIPRejectsEmptyOutput(t *testing.T) {
 
 func TestStartForwardCapturesStderrAndClosesDone(t *testing.T) {
 	withStubSSH(t, "echo 'Permission denied (publickey).' >&2\nexit 255\n")
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 
 	proc, err := e.StartForward(context.Background(), ForwardSpec{
 		Host: "h", RemoteAddr: "1.2.3.4", RemotePort: 1, LocalPort: 2,
@@ -140,7 +158,7 @@ func TestStartForwardCapturesStderrAndClosesDone(t *testing.T) {
 
 func TestStartForwardPassesTheResolvedAddress(t *testing.T) {
 	argvLog := withStubSSH(t, "sleep 30\n")
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 
 	proc, err := e.StartForward(context.Background(), ForwardSpec{
 		Host: "h", RemoteAddr: "172.18.0.9", RemotePort: 27017, LocalPort: 27018,
@@ -162,7 +180,7 @@ func TestStartForwardPassesTheResolvedAddress(t *testing.T) {
 
 func TestTerminateStopsAStubbornProcess(t *testing.T) {
 	withStubSSH(t, "trap '' TERM\nsleep 30\n")
-	e := New(t.TempDir())
+	e := New(shortTempDir(t))
 
 	proc, err := e.StartForward(context.Background(), ForwardSpec{Host: "h", RemoteAddr: "1.2.3.4", RemotePort: 1, LocalPort: 2})
 	if err != nil {
@@ -180,5 +198,80 @@ func TestTerminateStopsAStubbornProcess(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 8*time.Second {
 		t.Fatalf("escalation to SIGKILL took %v", elapsed)
+	}
+}
+
+func TestShellQuoteProtectsRemoteArguments(t *testing.T) {
+	// ssh joins its argv with spaces and the REMOTE shell re-parses the result.
+	// Anything with a space, backslash or quote must survive that second pass
+	// intact, or docker receives arguments nobody wrote.
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain", "docker", "docker"},
+		{"flag", "--format", "--format"},
+		{"container name", "app_mongo_staging", "app_mongo_staging"},
+		{"backslash-t", `{{.Names}}\t{{.Ports}}`, `'{{.Names}}\t{{.Ports}}'`},
+		{"embedded space", "{{.IPAddress}} {{end}}", `'{{.IPAddress}} {{end}}'`},
+		{"single quote", "it's", `'it'\''s'`},
+		{"empty", "", "''"},
+		{"semicolon", "a;rm -rf /", `'a;rm -rf /'`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shellQuote(tc.in); got != tc.want {
+				t.Fatalf("shellQuote(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRemoteCommandKeepsTheDockerPSFormatIntact(t *testing.T) {
+	got := remoteCommand([]string{"docker", "ps", "--format", `{{.Names}}\t{{.Ports}}`})
+
+	want := `docker ps --format '{{.Names}}\t{{.Ports}}'`
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestRemoteCommandKeepsTheInspectFormatInOnePiece(t *testing.T) {
+	// This format contains a space. Unquoted, the remote shell splits it and
+	// docker reports "template parsing error: unexpected EOF" — which is how
+	// every tunnel failed to resolve its container address.
+	got := remoteCommand([]string{
+		"docker", "inspect", "-f",
+		`{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}`,
+		"app_mongo_staging",
+	})
+
+	want := `docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}' app_mongo_staging`
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestRunSendsTheRemoteCommandAsASingleArgument(t *testing.T) {
+	// ssh must receive one argument holding the whole quoted command, not a
+	// word per token: only then is the remote shell's re-parse harmless.
+	argvLog := withStubSSH(t, "exit 0\n")
+	e := New(shortTempDir(t))
+
+	if _, err := e.Run(context.Background(), "host-a", "docker", "ps", "--format", `{{.Names}}\t{{.Ports}}`); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	logged, err := os.ReadFile(argvLog)
+	if err != nil {
+		t.Fatalf("read argv log: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(logged), "\n"), "\n")
+	last := lines[len(lines)-1]
+
+	if last != `docker ps --format '{{.Names}}\t{{.Ports}}'` {
+		t.Fatalf("ssh received %q as its final argument, want the whole quoted command", last)
 	}
 }

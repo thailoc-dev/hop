@@ -25,14 +25,19 @@ func buildHop(t *testing.T) string {
 func stubSSHDir(t *testing.T) string {
 	t.Helper()
 	dir := shortTempDir(t)
+	// The remote command arrives as ONE shell-quoted argument, which is what
+	// ssh actually receives -- matching on a bare "inspect" word would pass
+	// against a broken caller.
 	script := `#!/bin/sh
 for arg in "$@"; do
-  if [ "$arg" = "inspect" ]; then
-    echo "172.18.0.4"
-    exit 0
-  fi
+  case "$arg" in
+    *"docker inspect"*)
+      echo "172.18.0.4"
+      exit 0
+      ;;
+  esac
 done
-# A forward: hold the local port open so the ls probe succeeds.
+# A forward: hold the local port open so the bind check and ls probe succeed.
 port=$(printf '%s\n' "$@" | sed -n 's/^127\.0\.0\.1:\([0-9]*\):.*/\1/p' | head -1)
 if [ -n "$port" ]; then
   exec nc -l 127.0.0.1 "$port"

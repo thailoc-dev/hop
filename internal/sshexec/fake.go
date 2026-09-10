@@ -19,6 +19,10 @@ type Fake struct {
 	procs     []*FakeProc
 	startErr  error
 	runDelay  time.Duration
+
+	// onStart fires when a forward starts, so a test can simulate the local
+	// port becoming bound the way real ssh does.
+	onStart func(ForwardSpec)
 }
 
 func NewFake() *Fake {
@@ -91,17 +95,30 @@ func (f *Fake) Run(ctx context.Context, _ string, _ ...string) (Result, error) {
 	return result, err
 }
 
-func (f *Fake) StartForward(_ context.Context, spec ForwardSpec) (Proc, error) {
+// SetOnStartForward registers a hook fired each time a forward starts.
+func (f *Fake) SetOnStartForward(hook func(ForwardSpec)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.onStart = hook
+}
+
+func (f *Fake) StartForward(_ context.Context, spec ForwardSpec) (Proc, error) {
+	f.mu.Lock()
 	if f.startErr != nil {
 		err := f.startErr
 		f.startErr = nil
+		f.mu.Unlock()
 		return nil, err
 	}
 	f.forwards = append(f.forwards, spec)
 	proc := NewFakeProc()
 	f.procs = append(f.procs, proc)
+	hook := f.onStart
+	f.mu.Unlock()
+
+	if hook != nil {
+		hook(spec)
+	}
 	return proc, nil
 }
 

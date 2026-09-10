@@ -15,6 +15,11 @@ import (
 // started one shows up before anyone notices it missing.
 const CacheTTL = 60 * time.Second
 
+// WarmDebounce is how long a scheduled background fetch suppresses further
+// ones for the same host. Every keystroke runs a completion, so without this
+// holding Tab would spawn an ssh per press.
+const WarmDebounce = 15 * time.Second
+
 // Cache stores one container listing per host on disk, so repeated Tab
 // presses do not each cost a round trip.
 type Cache struct {
@@ -64,6 +69,31 @@ func (c *Cache) read(host string) (cacheEntry, bool) {
 		return cacheEntry{}, false // a corrupt entry is simply a miss
 	}
 	return entry, true
+}
+
+// ShouldWarm reports whether a background fetch for this host is worth
+// scheduling, i.e. none was scheduled recently.
+func (c *Cache) ShouldWarm(host string) bool {
+	info, err := os.Stat(c.path(host) + ".warming")
+	if err != nil {
+		return true
+	}
+	return time.Since(info.ModTime()) > WarmDebounce
+}
+
+// MarkWarming records that a background fetch has just been scheduled.
+func (c *Cache) MarkWarming(host string) error {
+	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
+	marker := c.path(host) + ".warming"
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		return fmt.Errorf("mark warming: %w", err)
+	}
+	// WriteFile on an existing file leaves mtime alone on some systems; set it
+	// explicitly so the debounce window actually restarts.
+	now := time.Now()
+	return os.Chtimes(marker, now, now)
 }
 
 func (c *Cache) Put(host string, containers []Container) error {

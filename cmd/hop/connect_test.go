@@ -18,7 +18,10 @@ import (
 // why. Anything that builds a socket path must use this instead.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "hop")
+	// "/tmp" explicitly, not TMPDIR: on macOS TMPDIR is itself ~48 bytes,
+	// which leaves too little of the 104-byte sun_path budget for a socket
+	// name plus the 17-byte suffix ssh appends while binding a ControlMaster.
+	dir, err := os.MkdirTemp("/tmp", "hop")
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}

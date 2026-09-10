@@ -13,14 +13,31 @@ import (
 	"github.com/locnguyen/hop/internal/tunnel"
 )
 
+// bindsOnStart makes the fake pair behave like real ssh: the local port is
+// free until a forward starts, bound while it runs, and free again once it
+// exits. Without it nothing ever reaches healthy, because a tunnel now waits
+// for the port to be bound before saying so.
+func bindsOnStart(ex *sshexec.Fake, pr *sysprobe.Fake) {
+	ex.SetOnStartForward(func(spec sshexec.ForwardSpec) {
+		pr.SetPortBusy(spec.LocalPort, sysprobe.Holder{Command: "ssh", PID: 1})
+		proc := ex.LastForward()
+		go func() {
+			<-proc.Done()
+			pr.SetPortFree(spec.LocalPort)
+		}()
+	})
+}
+
 func newSup(t *testing.T) (*Supervisor, *sshexec.Fake, *tunnel.FakeClock, string) {
 	t.Helper()
 	ex := sshexec.NewFake()
 	ex.SetContainerIP("h", "c", "172.18.0.4")
+	pr := sysprobe.NewFake()
+	bindsOnStart(ex, pr)
 	clk := tunnel.NewFakeClock(time.Date(2026, 9, 10, 9, 0, 0, 0, time.UTC))
 	statePath := filepath.Join(t.TempDir(), "state.json")
 
-	s := New(Config{StatePath: statePath, Exec: ex, Probe: sysprobe.NewFake(), Clock: clk})
+	s := New(Config{StatePath: statePath, Exec: ex, Probe: pr, Clock: clk})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _ = s.Run(ctx) }()
@@ -199,8 +216,10 @@ func TestRunRestoresTunnelsFromState(t *testing.T) {
 
 	ex := sshexec.NewFake()
 	ex.SetContainerIP("h", "c", "10.0.0.1")
+	pr := sysprobe.NewFake()
+	bindsOnStart(ex, pr)
 	s := New(Config{
-		StatePath: statePath, Exec: ex, Probe: sysprobe.NewFake(),
+		StatePath: statePath, Exec: ex, Probe: pr,
 		Clock: tunnel.NewFakeClock(time.Now()),
 	})
 	ctx, cancel := context.WithCancel(context.Background())

@@ -65,8 +65,45 @@ func forwardArgs(spec ForwardSpec) []string {
 	}
 }
 
+// shellSafe are the characters that need no quoting for a POSIX shell.
+const shellSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" +
+	"_-.,:/=@+"
+
+// shellQuote makes one argument survive the remote shell.
+//
+// ssh does not take a remote argv: it joins the arguments it is given with
+// spaces and hands the result to the login shell, which parses it a second
+// time. An unquoted `{{.IPAddress}} {{end}}` therefore arrives as two words,
+// and an unquoted `\t` arrives as a bare `t`. Both silently produce the wrong
+// docker invocation rather than an error anyone would notice.
+func shellQuote(arg string) string {
+	if arg == "" {
+		return "''"
+	}
+	if strings.IndexFunc(arg, func(r rune) bool {
+		return !strings.ContainsRune(shellSafe, r)
+	}) < 0 {
+		return arg
+	}
+	// Single quotes protect everything except a single quote itself, which is
+	// closed, escaped and reopened.
+	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
+}
+
+// remoteCommand renders a command as one shell-safe string for ssh.
+func remoteCommand(cmd []string) string {
+	quoted := make([]string, len(cmd))
+	for i, arg := range cmd {
+		quoted[i] = shellQuote(arg)
+	}
+	return strings.Join(quoted, " ")
+}
+
 func (e *realExecutor) Run(ctx context.Context, host string, cmd ...string) (Result, error) {
-	args := append(commandArgs(e.socketDir, host), cmd...)
+	args := commandArgs(e.socketDir, host)
+	if len(cmd) > 0 {
+		args = append(args, remoteCommand(cmd))
+	}
 	c := exec.CommandContext(ctx, "ssh", args...)
 
 	var stdout, stderr bytes.Buffer

@@ -59,7 +59,7 @@ func completeTunnelArgs(_ *cobra.Command, args []string, toComplete string) ([]s
 			return nil, noFiles
 		}
 		var out []string
-		for _, container := range complete.Containers(context.Background(), executor, cache, args[0]) {
+		for _, container := range complete.Containers(context.Background(), executor, cache, args[0], spawnWarm) {
 			if strings.HasPrefix(container.Name, toComplete) {
 				out = append(out, container.Name)
 			}
@@ -71,7 +71,7 @@ func completeTunnelArgs(_ *cobra.Command, args []string, toComplete string) ([]s
 		if !ok {
 			return nil, noFiles
 		}
-		for _, container := range complete.Containers(context.Background(), executor, cache, args[0]) {
+		for _, container := range complete.Containers(context.Background(), executor, cache, args[0], spawnWarm) {
 			if container.Name != args[1] {
 				continue
 			}

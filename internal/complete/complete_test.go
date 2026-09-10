@@ -13,7 +13,7 @@ func TestContainersQueriesAndCaches(t *testing.T) {
 	ex.SetRunResult(sshexec.Result{Stdout: "mongo\t0.0.0.0:27018->27017/tcp\n"}, nil)
 	cache := newCache(t, time.Minute)
 
-	got := Containers(context.Background(), ex, cache, "host-a")
+	got := Containers(context.Background(), ex, cache, "host-a", nil)
 
 	if len(got) != 1 || got[0].Name != "mongo" {
 		t.Fatalf("got %+v", got)
@@ -29,7 +29,7 @@ func TestContainersServesTheCacheWithoutTouchingTheNetwork(t *testing.T) {
 	cache := newCache(t, time.Minute)
 	_ = cache.Put("host-a", []Container{{Name: "cached"}})
 
-	got := Containers(context.Background(), ex, cache, "host-a")
+	got := Containers(context.Background(), ex, cache, "host-a", nil)
 
 	if len(got) != 1 || got[0].Name != "cached" {
 		t.Fatalf("got %+v, want the cached entry", got)
@@ -44,7 +44,7 @@ func TestContainersNeverBlocksPastTheTimeout(t *testing.T) {
 	cache := newCache(t, time.Minute)
 
 	start := time.Now()
-	got := Containers(context.Background(), ex, cache, "host-a")
+	got := Containers(context.Background(), ex, cache, "host-a", nil)
 	elapsed := time.Since(start)
 
 	if elapsed > 2*time.Second {
@@ -62,7 +62,7 @@ func TestContainersFallsBackToStaleOnTimeout(t *testing.T) {
 	_ = cache.Put("host-a", []Container{{Name: "stale-but-useful"}})
 	time.Sleep(time.Millisecond)
 
-	got := Containers(context.Background(), ex, cache, "host-a")
+	got := Containers(context.Background(), ex, cache, "host-a", nil)
 
 	if len(got) != 1 || got[0].Name != "stale-but-useful" {
 		t.Fatalf("got %+v, want the stale entry rather than nothing", got)
@@ -73,7 +73,92 @@ func TestContainersReturnsNothingOnError(t *testing.T) {
 	ex := sshexec.NewFake()
 	ex.SetRunResult(sshexec.Result{Stderr: "Permission denied", ExitCode: 255}, nil)
 
-	if got := Containers(context.Background(), ex, newCache(t, time.Minute), "host-a"); got != nil {
+	if got := Containers(context.Background(), ex, newCache(t, time.Minute), "host-a", nil); got != nil {
 		t.Fatalf("got %+v, want nothing when docker ps failed", got)
+	}
+}
+
+// recordWarm captures the hosts handed to the background warmer.
+func recordWarm(hosts *[]string) func(string) {
+	return func(host string) { *hosts = append(*hosts, host) }
+}
+
+// The regression test for the cold-start deadlock: a first lookup cannot beat
+// the 300ms ceiling, so unless something is scheduled to fill the cache out of
+// band, completion can never succeed on any press, ever.
+func TestContainersSchedulesAWarmWhenTheLookupTimesOut(t *testing.T) {
+	ex := sshexec.NewFake()
+	ex.SetRunDelay(10 * time.Second) // a cold connection: ~3s in reality
+	cache := newCache(t, time.Minute)
+
+	var warmed []string
+	got := Containers(context.Background(), ex, cache, "host-a", recordWarm(&warmed))
+
+	if got != nil {
+		t.Fatalf("got %+v, want nothing on this press", got)
+	}
+	if len(warmed) != 1 || warmed[0] != "host-a" {
+		t.Fatalf("warmed = %v, want exactly [host-a]; without this the cache "+
+			"never fills and completion is broken forever", warmed)
+	}
+}
+
+func TestContainersDoesNotWarmOnAFreshCacheHit(t *testing.T) {
+	ex := sshexec.NewFake()
+	cache := newCache(t, time.Minute)
+	_ = cache.Put("host-a", []Container{{Name: "mongo"}})
+
+	var warmed []string
+	Containers(context.Background(), ex, cache, "host-a", recordWarm(&warmed))
+
+	if len(warmed) != 0 {
+		t.Fatalf("warmed %v despite a fresh cache hit", warmed)
+	}
+}
+
+func TestContainersDoesNotWarmTwiceInARow(t *testing.T) {
+	ex := sshexec.NewFake()
+	ex.SetRunDelay(10 * time.Second)
+	cache := newCache(t, time.Minute)
+
+	var warmed []string
+	Containers(context.Background(), ex, cache, "host-a", recordWarm(&warmed))
+	Containers(context.Background(), ex, cache, "host-a", recordWarm(&warmed))
+
+	if len(warmed) != 1 {
+		t.Fatalf("warmed %d times, want 1; each keystroke would spawn an ssh", len(warmed))
+	}
+}
+
+func TestContainersStillHonoursTheCeilingWhileWarming(t *testing.T) {
+	ex := sshexec.NewFake()
+	ex.SetRunDelay(10 * time.Second)
+	cache := newCache(t, time.Minute)
+
+	start := time.Now()
+	Containers(context.Background(), ex, cache, "host-a", func(string) {})
+
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("blocked for %v; the warm must not extend the ceiling", elapsed)
+	}
+}
+
+// Fetch is what the detached warmer runs: the same lookup with no ceiling.
+func TestFetchWritesTheCacheWithNoDeadline(t *testing.T) {
+	ex := sshexec.NewFake()
+	ex.SetRunDelay(600 * time.Millisecond) // twice the completion ceiling
+	ex.SetRunResult(sshexec.Result{Stdout: "mongo\t27017/tcp\n"}, nil)
+	cache := newCache(t, time.Minute)
+
+	if err := Fetch(context.Background(), ex, cache, "host-a"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	got, ok := cache.Get("host-a")
+	if !ok {
+		t.Fatal("Fetch did not populate the cache")
+	}
+	if len(got) != 1 || got[0].Name != "mongo" {
+		t.Fatalf("cached %+v", got)
 	}
 }

@@ -87,3 +87,33 @@ func TestCacheGetIsFineWithNoDirectory(t *testing.T) {
 		t.Fatal("got a hit from a directory that does not exist")
 	}
 }
+
+func TestShouldWarmIsTrueForAnUnknownHost(t *testing.T) {
+	c := newCache(t, time.Minute)
+	if !c.ShouldWarm("host-a") {
+		t.Fatal("refused to warm a host that has never been fetched")
+	}
+}
+
+func TestMarkWarmingSuppressesRepeatWarms(t *testing.T) {
+	// Every keystroke triggers a completion. Without debouncing, holding Tab
+	// would spawn a background ssh per press.
+	c := newCache(t, time.Minute)
+
+	if err := c.MarkWarming("host-a"); err != nil {
+		t.Fatalf("MarkWarming: %v", err)
+	}
+
+	if c.ShouldWarm("host-a") {
+		t.Fatal("a warm was already in flight but another was allowed")
+	}
+}
+
+func TestMarkWarmingIsPerHost(t *testing.T) {
+	c := newCache(t, time.Minute)
+	_ = c.MarkWarming("host-a")
+
+	if !c.ShouldWarm("host-b") {
+		t.Fatal("warming one host suppressed warming another")
+	}
+}

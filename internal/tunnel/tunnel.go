@@ -22,6 +22,13 @@ const (
 
 	// eventRing is how many transitions are kept for `hop logs`.
 	eventRing = 200
+
+	// bindPollInterval and bindTimeout govern the wait for ssh to bind the
+	// local port. Starting the ssh process is not the same as having a working
+	// forward: a real connection needs TCP, key exchange and authentication
+	// first, which takes seconds.
+	bindPollInterval = 100 * time.Millisecond
+	bindTimeout      = 30 * time.Second
 )
 
 // State is where a tunnel is in its lifecycle.
@@ -269,6 +276,17 @@ func (t *Tunnel) attempt(ctx context.Context) (Class, error) {
 		return Classify(err.Error()), err
 	}
 
+	// Wait for the forward to actually exist before calling it healthy.
+	//
+	// This is a bind test, not a dial: once ssh has bound the local port,
+	// PortFree returns false. Dialling would open and close a connection
+	// against the database on every reconnect, which is exactly the log noise
+	// the spec refuses to produce.
+	if bound, err := t.waitForBind(ctx, proc); !bound {
+		_ = proc.Terminate()
+		return ClassNetwork, err
+	}
+
 	t.transition(StateHealthy, "")
 	healthySince := t.deps.Clock.Mono()
 
@@ -297,6 +315,39 @@ func (t *Tunnel) attempt(ctx context.Context) (Class, error) {
 		_ = proc.Terminate()
 		t.transition(StateStopped, "")
 		return ClassUnknown, nil
+	}
+}
+
+// waitForBind blocks until ssh has bound the local port, the process exits,
+// or the deadline passes.
+func (t *Tunnel) waitForBind(ctx context.Context, proc sshexec.Proc) (bool, error) {
+	deadline := t.deps.Clock.Mono() + bindTimeout
+
+	for {
+		if !t.deps.Probe.PortFree(t.spec.LocalPort) {
+			return true, nil
+		}
+		if t.deps.Clock.Mono() >= deadline {
+			return false, fmt.Errorf(
+				"ssh did not bind local port %d within %s", t.spec.LocalPort, bindTimeout)
+		}
+
+		select {
+		case <-proc.Done():
+			// Exited before binding: its stderr says why.
+			stderr := proc.Stderr()
+			if stderr == "" {
+				stderr = "ssh exited before the forward was established"
+			}
+			return false, fmt.Errorf("%s", stderr)
+		case <-t.deps.Clock.After(bindPollInterval):
+		case <-t.recycle:
+			return false, fmt.Errorf("recycled")
+		case <-t.stop:
+			return false, fmt.Errorf("stopped")
+		case <-ctx.Done():
+			return false, fmt.Errorf("stopped")
+		}
 	}
 }
 

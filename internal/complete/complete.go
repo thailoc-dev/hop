@@ -2,6 +2,8 @@ package complete
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/locnguyen/hop/internal/sshexec"
@@ -15,17 +17,38 @@ import (
 // short enough to feel instant when it fails.
 const Timeout = 300 * time.Millisecond
 
+// Fetch runs the container lookup with no completion ceiling and writes the
+// result to the cache. It is what the detached warmer calls.
+func Fetch(ctx context.Context, ex sshexec.Executor, cache *Cache, host string) error {
+	result, err := ex.Run(ctx, host, "docker", "ps", "--format", PSFormat)
+	if err != nil {
+		return err
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("docker ps on %s: %s", host, strings.TrimSpace(result.Stderr))
+	}
+	return cache.Put(host, ParsePS(result.Stdout))
+}
+
 // Containers lists the containers running on a host, for completion.
 //
 // It never returns an error: a completion function has nowhere to display one.
 // Every failure degrades to the best available answer — a stale cache entry,
 // or nothing.
-func Containers(ctx context.Context, ex sshexec.Executor, cache *Cache, host string) []Container {
+//
+// warm schedules a background fetch that is not bound by Timeout. It exists
+// because a FIRST connection to a host costs seconds, not milliseconds: ssh
+// must do TCP, key exchange and authentication before docker even runs. With
+// only the foreground path, the ceiling is missed, nothing is cached, and the
+// next press is equally cold — completion could never succeed on any press.
+// Scheduling the fetch out of band is what lets the cache bootstrap, while the
+// ceiling here stays exactly as it was.
+func Containers(ctx context.Context, ex sshexec.Executor, cache *Cache, host string, warm func(string)) []Container {
 	if fresh, ok := cache.Get(host); ok {
 		return fresh
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	lookupCtx, cancel := context.WithTimeout(ctx, Timeout)
 	defer cancel()
 
 	type outcome struct {
@@ -35,7 +58,7 @@ func Containers(ctx context.Context, ex sshexec.Executor, cache *Cache, host str
 	results := make(chan outcome, 1)
 
 	go func() {
-		result, err := ex.Run(ctx, host, "docker", "ps", "--format", PSFormat)
+		result, err := ex.Run(lookupCtx, host, "docker", "ps", "--format", PSFormat)
 		if err != nil || result.ExitCode != 0 {
 			results <- outcome{}
 			return
@@ -45,17 +68,28 @@ func Containers(ctx context.Context, ex sshexec.Executor, cache *Cache, host str
 
 	select {
 	case got := <-results:
-		if !got.ok {
-			return nil
+		if got.ok {
+			_ = cache.Put(host, got.containers) // a cache write failure is not fatal
+			return got.containers
 		}
-		_ = cache.Put(host, got.containers) // a cache write failure is not fatal
-		return got.containers
 
-	case <-ctx.Done():
-		// Out of time. A stale answer is still better than an empty one.
-		if stale, ok := cache.GetStale(host); ok {
-			return stale
-		}
-		return nil
+	case <-lookupCtx.Done():
 	}
+
+	// The foreground lookup did not deliver. Schedule the out-of-band fetch so
+	// the next press has an answer, then give back whatever is on hand.
+	scheduleWarm(cache, host, warm)
+
+	if stale, ok := cache.GetStale(host); ok {
+		return stale
+	}
+	return nil
+}
+
+func scheduleWarm(cache *Cache, host string, warm func(string)) {
+	if warm == nil || !cache.ShouldWarm(host) {
+		return
+	}
+	_ = cache.MarkWarming(host)
+	warm(host)
 }

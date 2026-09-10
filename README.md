@@ -74,6 +74,13 @@ returns immediately with nothing rather than hanging the shell. On timeout an
 expired cache entry is served in preference to nothing: a minute-old container
 list is almost always still right, and being wrong costs one keystroke.
 
+**The first Tab on a host you have not completed recently returns nothing.**
+A first ssh connection costs seconds — TCP, key exchange and authentication
+before docker even runs — which no 300 ms ceiling can accommodate. That press
+schedules a detached `hop __warm` to fetch the list out of band, so the next
+press is instant. Without it the cache could never fill and completion would
+fail on every press forever.
+
 ## How it works
 
 The first `hop` command auto-spawns a background supervisor and talks to it
@@ -131,9 +138,19 @@ go test ./... -short                    # hermetic: no network, no VPS, no sleep
 go test ./cmd/hop/ -run TestEndToEnd    # spawns a real daemon against a stub ssh
 ```
 
-Tests must not build socket paths from `t.TempDir()`: it embeds the test name,
-and a long one pushes the path past the 104-byte `sun_path` limit. Use the
-`shortTempDir` helper instead.
+Two traps this suite has fallen into, both worth knowing before adding tests:
+
+**Socket paths.** Never build one from `t.TempDir()`: it embeds the test name,
+and a long one pushes past the 104-byte `sun_path` limit. `shortTempDir` uses
+`/tmp` directly rather than `TMPDIR`, which on macOS is itself ~48 bytes —
+enough on its own to break a ControlMaster path once ssh appends its 17-byte
+suffix.
+
+**Stubs that encode the bug.** A stub `ssh` matching on a bare `inspect`
+argument passes against a caller that forgets to quote the remote command,
+because ssh joins its argv and the remote shell re-parses it. Stubs must match
+what ssh really receives: one shell-quoted string. The fakes cannot catch this
+class of bug at all, which is why the integration tests matter.
 
 Integration tests need a reachable host and skip without one:
 
