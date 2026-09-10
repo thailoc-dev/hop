@@ -29,5 +29,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newTunnelCmd())
 	root.AddCommand(newLsCmd())
 	root.AddCommand(newDownCmd(), newRestartCmd(), newLogsCmd())
+	root.AddCommand(newRunCmd(), newShellCmd(), newPushCmd(), newPullCmd(), newDockerIPCmd())
 	return root
 }
