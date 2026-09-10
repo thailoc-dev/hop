@@ -48,8 +48,8 @@ relitigated during implementation:
 - Reboot persistence via launchd. The state file reserves an `autostart`
   field so this can be added without rework, but nothing reads it yet.
 - Provisioning, config management, cloud-provider APIs.
-- Replacing `vps run`, `vps shell`, `vps push`, `vps pull`. The bash script
-  keeps those until a later version; the new binary owns `tunnel` only.
+- Supervision, retry, or state for anything other than tunnels. The
+  passthrough commands below are deliberately dumb `exec` wrappers.
 
 ## Command surface
 
@@ -70,6 +70,32 @@ Flags on the create form:
 | `--wait <dur>` | `10s` | How long to block waiting for the first healthy state before returning. `0` returns immediately. |
 
 Global: `--json`, `--no-color`, `--quiet`, `--version`, `--help`.
+
+### Passthrough commands
+
+The old script is to be deleted once this binary is trusted, so everything it
+does must have a home. These four carry over unchanged in behaviour and
+argument order, as direct `exec` handoffs to `ssh`/`scp`:
+
+```
+vps2 run <host> <command...>            exec ssh <host> <command...>
+vps2 shell <host>                       exec ssh <host>
+vps2 push [scp-opts...] <host> <local> <remote>
+vps2 pull [scp-opts...] <host> <remote> <local>
+```
+
+They get no supervision, no retry, no daemon involvement, and no state. They
+exist so that removing the bash script loses nothing. `docker-ip` also carries
+over, since the tunnel supervisor already resolves container addresses:
+
+```
+vps2 docker-ip <host> <container>       print the container's IP
+```
+
+Anything beyond this — inventory, remote docker operations, rsync-backed
+transfer — stays out of scope and is a later version's problem.
+
+### Addressing tunnels
 
 Tunnels are addressed by **local port**. It is already unique per tunnel, it is
 the number that is typed into the database client anyway, and it requires
@@ -325,9 +351,26 @@ library: `text/tabwriter` for tables, a small internal ANSI helper for colour,
 
 ## Migration
 
-The new binary is installed as `vps2` first, so every command in this document
-is typed as `vps2 tunnel …` while it is being trusted, and the existing `vps`
-script stays exactly as it is. Once it has run for a week without needing a
-manual restart, the bash script's `tunnel` case is replaced by a delegation to
-`vps2 tunnel "$@"`, leaving `run`, `shell`, `push`, and `pull` untouched. The
-rename to `vps` happens only when the bash script has nothing left in it.
+The old script at `~/.local/bin/vps` is to be decommissioned, which is only
+safe once every one of its six commands has an equivalent. It does, by the end
+of this spec: `tunnel` is the supervised replacement, `docker-ip` falls out of
+the supervisor, and `run`/`shell`/`push`/`pull` carry over as passthroughs.
+
+The cutover runs in four steps, and the deletion is the last one:
+
+1. **Install alongside.** The binary installs as `vps2`. The existing `vps`
+   script is untouched, so there is always a working fallback one keystroke
+   away. Every command in this document is typed as `vps2 …` during this stage.
+2. **Burn in.** Use `vps2 tunnel` for daily dev, staging, and production
+   database work for one week. The bar to advance is that no tunnel needed a
+   manual restart across at least one container redeploy, one laptop
+   sleep/wake cycle, and one network change.
+3. **Verify the passthroughs.** Confirm `run`, `shell`, `push`, `pull`, and
+   `docker-ip` behave identically to the script, including argument order,
+   `scp` option forwarding, and exit codes.
+4. **Decommission.** Copy the script to `docs/legacy-vps.sh` in this repo so
+   its behaviour stays readable, delete `~/.local/bin/vps`, and install the
+   binary as `vps`. Only then does the old name belong to the new tool.
+
+Step 4 does not run on a schedule or as part of any build. It happens once,
+deliberately, after steps 2 and 3 have actually passed.
