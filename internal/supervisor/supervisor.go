@@ -8,6 +8,7 @@ import (
 	"log"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/locnguyen/hop/internal/control"
 	"github.com/locnguyen/hop/internal/sshexec"
@@ -15,6 +16,15 @@ import (
 	"github.com/locnguyen/hop/internal/sysprobe"
 	"github.com/locnguyen/hop/internal/tunnel"
 )
+
+// WatchInterval is how often the supervisor checks for a system wake or a
+// changed default route.
+const WatchInterval = 10 * time.Second
+
+// SleepThreshold is the wall-versus-monotonic discrepancy that means the
+// machine was suspended. Anything smaller is ordinary scheduling noise or an
+// NTP correction, neither of which is worth recycling a working tunnel for.
+const SleepThreshold = 30 * time.Second
 
 // Config is everything the supervisor needs from the outside world.
 type Config struct {
@@ -81,9 +91,73 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		}
 	}
 
+	go s.watch(ctx)
+
 	<-ctx.Done()
 	s.stopAll()
 	return nil
+}
+
+// watch recycles every tunnel when the machine wakes from sleep or moves to a
+// different network.
+//
+// Neither event closes the TCP connection cleanly, so ssh does not notice for
+// up to 45 seconds — and after a long suspend it may never notice, because the
+// peer has long since dropped the session. Recycling proactively is what makes
+// reopening a laptop lid produce a working tunnel instead of a hung client.
+func (s *Supervisor) watch(ctx context.Context) {
+	lastWall := s.cfg.Clock.Now()
+	lastMono := s.cfg.Clock.Mono()
+	lastRoute, _ := s.cfg.Probe.DefaultRoute()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.cfg.Clock.After(WatchInterval):
+		}
+
+		wall := s.cfg.Clock.Now()
+		mono := s.cfg.Clock.Mono()
+
+		// Wall time advances during suspend; monotonic time does not. A gap
+		// between the two is the machine having been asleep for the difference.
+		drift := wall.Sub(lastWall) - (mono - lastMono)
+		lastWall, lastMono = wall, mono
+
+		if drift >= SleepThreshold {
+			s.recycleAll(fmt.Sprintf("system slept for %s", drift.Round(time.Second)))
+			continue
+		}
+
+		route, err := s.cfg.Probe.DefaultRoute()
+		if err != nil {
+			continue // a probe failure is not evidence of a change
+		}
+		if route != lastRoute {
+			// Assign before recycling so a machine that stays offline (route
+			// "") settles after one recycle instead of firing every tick.
+			previous := lastRoute
+			lastRoute = route
+			s.recycleAll(fmt.Sprintf("default route changed from %q to %q", previous, route))
+		}
+	}
+}
+
+func (s *Supervisor) recycleAll(reason string) {
+	s.mu.Lock()
+	entries := make([]*entry, 0, len(s.tunnels))
+	for _, e := range s.tunnels {
+		entries = append(entries, e)
+	}
+	s.mu.Unlock()
+
+	if len(entries) > 0 {
+		log.Printf("recycling %d tunnel(s): %s", len(entries), reason)
+	}
+	for _, e := range entries {
+		e.tun.Recycle()
+	}
 }
 
 // Handle implements control.Handler.
