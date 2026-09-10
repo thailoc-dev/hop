@@ -1,5 +1,7 @@
 # hop
 
+[![CI](https://github.com/thailoc-dev/hop/actions/workflows/ci.yml/badge.svg)](https://github.com/thailoc-dev/hop/actions/workflows/ci.yml)
+
 Supervised SSH tunnels to Docker containers on remote hosts.
 
 ```bash
@@ -169,6 +171,15 @@ argument passes against a caller that forgets to quote the remote command,
 because ssh joins its argv and the remote shell re-parses it. Stubs must match
 what ssh really receives: one shell-quoted string. The fakes cannot catch this
 class of bug at all, which is why the integration tests matter.
+
+CI runs `make check` on macOS for every push and pull request. macOS rather
+than Linux because `sysprobe` shells out to `route -n get default`, which is
+BSD-only, and `hopfs` derives its socket budget from darwin's 104-byte
+`sun_path`.
+
+CI does **not** run the integration tests — they need a reachable VPS. That
+gap is deliberate but worth knowing: it is exactly where three bugs hid, since
+the fakes cannot exercise ssh's argument handling.
 
 Integration tests need a reachable host and skip without one:
 

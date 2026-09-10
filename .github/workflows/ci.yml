@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push supersedes an in-flight run on the same ref.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS on purpose, not for parity with a developer laptop: sysprobe shells
+    # out to `route -n get default`, which is BSD-only, and hopfs derives its
+    # 86-byte socket budget from darwin's 104-byte sun_path. A green Ubuntu run
+    # would be testing a platform hop does not support.
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Single source of truth: the toolchain line in go.mod.
+          go-version-file: go.mod
+          cache: true
+
+      - name: Formatting
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        run: make build
+
+      # make check runs, in order: the spawn-rule guard, go vet, the hermetic
+      # suite under -race, and the end-to-end test against a stub ssh.
+      #
+      # Integration tests are not run here. They need a reachable VPS and skip
+      # without HOP_TEST_HOST, so CI proves everything except the real network
+      # path -- which is exactly the gap that hid three bugs, and is why the
+      # decommission checklist requires real use before retiring the old script.
+      - name: Check
+        run: make check
