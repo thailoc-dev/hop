@@ -162,3 +162,45 @@ func TestFetchWritesTheCacheWithNoDeadline(t *testing.T) {
 		t.Fatalf("cached %+v", got)
 	}
 }
+
+// Caching an empty list when docker clearly printed something is how a
+// parsing failure becomes permanent: the empty result is served for the whole
+// TTL and looks exactly like a host with nothing running. That is what the
+// unquoted-format bug did for a day.
+func TestFetchRefusesToCacheUnparseableOutput(t *testing.T) {
+	ex := sshexec.NewFake()
+	// Output with no tab separator: what docker returns when the format string
+	// loses its \t to the remote shell.
+	ex.SetRunResult(sshexec.Result{Stdout: "filter_nginx_stagingt0.0.0.0:80->80/tcp\n"}, nil)
+	cache := newCache(t, time.Minute)
+
+	err := Fetch(context.Background(), ex, cache, "host-a")
+
+	if err == nil {
+		t.Fatal("accepted output it could not parse")
+	}
+	if _, ok := cache.GetStale("host-a"); ok {
+		t.Fatal("cached an empty list from unparseable output; completion would " +
+			"then report 'no containers' for the whole TTL")
+	}
+}
+
+func TestFetchCachesAGenuinelyEmptyHost(t *testing.T) {
+	// A host running no containers is a real answer and must be cached, or
+	// every Tab press would re-fetch it.
+	ex := sshexec.NewFake()
+	ex.SetRunResult(sshexec.Result{Stdout: ""}, nil)
+	cache := newCache(t, time.Minute)
+
+	if err := Fetch(context.Background(), ex, cache, "host-a"); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	got, ok := cache.Get("host-a")
+	if !ok {
+		t.Fatal("an empty host was not cached")
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %+v, want an empty list", got)
+	}
+}

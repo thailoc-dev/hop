@@ -88,3 +88,53 @@ func TestContainerPortsDeduplicatesIPv4AndIPv6Entries(t *testing.T) {
 		t.Fatalf("got %v, want [80 443]", got)
 	}
 }
+
+// Docker prints the IPv6 mapping two different ways depending on version:
+// "[::]:80->80/tcp" on some hosts and ":::80->80/tcp" on others. Both appear
+// across this fleet, so both are pinned here.
+func TestContainerPortsHandlesBothIPv6Spellings(t *testing.T) {
+	bracketed := ContainerPorts("0.0.0.0:80->80/tcp, [::]:80->80/tcp")
+	bare := ContainerPorts("0.0.0.0:80->80/tcp, :::80->80/tcp")
+
+	if !reflect.DeepEqual(bracketed, []int{80}) {
+		t.Fatalf("bracketed form = %v, want [80]", bracketed)
+	}
+	if !reflect.DeepEqual(bare, []int{80}) {
+		t.Fatalf("bare form = %v, want [80]", bare)
+	}
+}
+
+// Regression: the exact `docker ps` output from example-filter-dev, reported as
+// completing nothing. The cause was a stale installed binary, not the parser --
+// this pins the shape so it stays that way.
+func TestParsePSHandlesSpamDetectorOutput(t *testing.T) {
+	stdout := "filter_nginx_staging\t0.0.0.0:80->80/tcp, :::80->80/tcp\n" +
+		"filter_node_staging\t3000/tcp\n" +
+		"filter_gateway_staging\t9000/tcp\n" +
+		"filter_lookup_staging\t8080/tcp\n" +
+		"filter_mongo_staging\t27017/tcp\n" +
+		"filter_redis_staging\t6379/tcp\n"
+
+	got := ParsePS(stdout)
+
+	if len(got) != 6 {
+		t.Fatalf("got %d containers, want 6: %+v", len(got), got)
+	}
+	want := map[string]int{
+		"filter_nginx_staging":         80,
+		"filter_node_staging":          3000,
+		"filter_gateway_staging": 9000,
+		"filter_lookup_staging":           8080,
+		"filter_mongo_staging":               27017,
+		"filter_redis_staging":         6379,
+	}
+	for _, container := range got {
+		wantPort, known := want[container.Name]
+		if !known {
+			t.Fatalf("unexpected container %q", container.Name)
+		}
+		if len(container.Ports) != 1 || container.Ports[0] != wantPort {
+			t.Fatalf("%s ports = %v, want [%d]", container.Name, container.Ports, wantPort)
+		}
+	}
+}

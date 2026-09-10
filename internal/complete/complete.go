@@ -27,7 +27,27 @@ func Fetch(ctx context.Context, ex sshexec.Executor, cache *Cache, host string) 
 	if result.ExitCode != 0 {
 		return fmt.Errorf("docker ps on %s: %s", host, strings.TrimSpace(result.Stderr))
 	}
-	return cache.Put(host, ParsePS(result.Stdout))
+
+	containers := ParsePS(result.Stdout)
+
+	// Output that yields nothing is a parsing failure, not an empty host: a
+	// host with no containers prints nothing at all. Caching the empty result
+	// would serve "no containers" for the whole TTL and make the breakage look
+	// like a fact about the host.
+	if len(containers) == 0 && strings.TrimSpace(result.Stdout) != "" {
+		return fmt.Errorf("could not parse docker ps output from %s: %q",
+			host, firstLine(result.Stdout))
+	}
+
+	return cache.Put(host, containers)
+}
+
+// firstLine keeps an error message to one readable line.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // Containers lists the containers running on a host, for completion.

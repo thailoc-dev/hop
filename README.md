@@ -114,6 +114,14 @@ invokes `ssh <host>`, everything configured there applies — including
 
 ## Build
 
+**After changing anything, reinstall.** `make build` writes `./bin/hop`; the
+binary on your PATH is `~/.local/bin/hop` and does not update itself. A stale
+one has been mistaken for a host-specific bug more than once — check with:
+
+```bash
+shasum ~/.local/bin/hop bin/hop   # the two hashes must match
+```
+
 ```bash
 make build      # ./bin/hop
 make install    # ~/.local/bin/hop
