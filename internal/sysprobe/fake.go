@@ -9,6 +9,7 @@ import (
 type Fake struct {
 	mu       sync.Mutex
 	busy     map[int]Holder
+	killed   []int
 	route    string
 	routeErr error
 }
@@ -48,6 +49,32 @@ func (f *Fake) PortHolder(port int) (Holder, error) {
 		return Holder{}, fmt.Errorf("nothing is listening on port %d", port)
 	}
 	return h, nil
+}
+
+func (f *Fake) Kill(pid int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.killed = append(f.killed, pid)
+	delete(f.busy, f.portOf(pid))
+	return nil
+}
+
+// Killed returns every PID passed to Kill, in order.
+func (f *Fake) Killed() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]int(nil), f.killed...)
+}
+
+// portOf finds which busy port a PID holds, so Kill frees it the way a real
+// termination would. Must be called with f.mu held.
+func (f *Fake) portOf(pid int) int {
+	for port, holder := range f.busy {
+		if holder.PID == pid {
+			return port
+		}
+	}
+	return 0
 }
 
 func (f *Fake) DefaultRoute() (string, error) {

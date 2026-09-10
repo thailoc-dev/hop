@@ -7,9 +7,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +33,9 @@ type Prober interface {
 	// DefaultRoute returns the current default gateway. A change means the
 	// machine moved networks and every tunnel should be recycled.
 	DefaultRoute() (string, error)
+	// Kill terminates a process by PID. Used only to reap orphaned forwards
+	// left by a daemon that did not shut down cleanly.
+	Kill(pid int) error
 }
 
 type prober struct{}
@@ -76,6 +81,17 @@ func (prober) PortHolder(port int) (Holder, error) {
 		return Holder{}, fmt.Errorf("nothing is listening on port %d", port)
 	}
 	return holder, nil
+}
+
+func (prober) Kill(pid int) error {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("find pid %d: %w", pid, err)
+	}
+	if err := process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("terminate pid %d: %w", pid, err)
+	}
+	return nil
 }
 
 func (prober) DefaultRoute() (string, error) {
