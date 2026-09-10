@@ -1,0 +1,26 @@
+Include included
+
+Host example-backend-dev
+    HostName 10.0.0.1
+    User deploy
+
+Host db-a db-b
+    HostName 10.0.0.2
+
+Host example-api
+    HostName 10.0.0.3
+
+Host bastion
+    HostName bastion.example.com
+
+host lowercase-keyword
+    HostName 10.0.0.4
+
+Host web-*
+    User www
+
+Host *
+    ServerAliveInterval 15
+
+Host !nope
+    User nobody
