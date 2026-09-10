@@ -1,6 +1,6 @@
 VERSION ?= dev
 
-.PHONY: build test install check-spawn check
+.PHONY: build test install check-spawn check-fmt check
 
 build:
 	go build -ldflags "-X main.Version=$(VERSION)" -o bin/hop ./cmd/hop
@@ -20,7 +20,13 @@ check-spawn:
 		| grep -vE "^internal/(sshexec|sysprobe)/|^cmd/hop/connect\.go" \
 		|| (echo "exec.Command in production code outside sshexec/sysprobe/connect.go" && exit 1)
 
-check: check-spawn
+check-fmt:
+	@unformatted=$$(gofmt -l cmd internal); \
+	if [ -n "$$unformatted" ]; then \
+		echo "These files need gofmt:"; echo "$$unformatted"; exit 1; \
+	fi
+
+check: check-fmt check-spawn
 	go vet ./...
 	go test ./... -short -race
 	go test ./cmd/hop/ -run TestEndToEnd

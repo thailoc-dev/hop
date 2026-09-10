@@ -32,20 +32,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Formatting
-        run: |
-          unformatted=$(gofmt -l cmd internal)
-          if [ -n "$unformatted" ]; then
-            echo "These files need gofmt:"
-            echo "$unformatted"
-            exit 1
-          fi
-
       - name: Build
         run: make build
 
-      # make check runs, in order: the spawn-rule guard, go vet, the hermetic
-      # suite under -race, and the end-to-end test against a stub ssh.
+      # make check runs, in order: gofmt, the spawn-rule guard, go vet, the
+      # hermetic suite under -race, and the end-to-end test against a stub ssh.
+      # CI deliberately calls the same target a developer runs, so a green
+      # local run means a green CI run.
       #
       # Integration tests are not run here. They need a reachable VPS and skip
       # without HOP_TEST_HOST, so CI proves everything except the real network

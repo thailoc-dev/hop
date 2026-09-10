@@ -127,7 +127,7 @@ shasum ~/.local/bin/hop bin/hop   # the two hashes must match
 ```bash
 make build      # ./bin/hop
 make install    # ~/.local/bin/hop
-make check      # vet, race tests, spawn-rule check, end-to-end
+make check      # gofmt, spawn rule, vet, race tests, end-to-end
 ```
 
 Go 1.25, pinned in `.mise.toml`. `cobra` is the only dependency.

@@ -121,12 +121,12 @@ func TestParsePSHandlesSpamDetectorOutput(t *testing.T) {
 		t.Fatalf("got %d containers, want 6: %+v", len(got), got)
 	}
 	want := map[string]int{
-		"filter_nginx_staging":         80,
-		"filter_node_staging":          3000,
+		"filter_nginx_staging":   80,
+		"filter_node_staging":    3000,
 		"filter_gateway_staging": 9000,
-		"filter_lookup_staging":           8080,
-		"filter_mongo_staging":               27017,
-		"filter_redis_staging":         6379,
+		"filter_lookup_staging":  8080,
+		"filter_mongo_staging":   27017,
+		"filter_redis_staging":   6379,
 	}
 	for _, container := range got {
 		wantPort, known := want[container.Name]
