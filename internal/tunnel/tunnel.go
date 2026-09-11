@@ -42,6 +42,11 @@ const (
 	StateRetrying   State = "retrying"
 	StateFatal      State = "fatal"
 	StateStopped    State = "stopped"
+
+	// StateSaved is never produced by the state machine. The CLI uses it for
+	// catalogue entries that are not currently running, so `hop ls` can show
+	// everything in one table.
+	StateSaved State = "saved"
 )
 
 // Spec is the persisted definition of a tunnel: everything needed to rebuild
@@ -54,12 +59,19 @@ type Spec struct {
 	LocalPort  int    `json:"local_port"`
 	Env        string `json:"env"`
 	Autostart  bool   `json:"autostart"` // reserved for launchd support
+
+	// Name is the catalogue key this tunnel was opened under, or empty. It is
+	// display metadata: the daemon never looks it up.
+	Name string `json:"name,omitempty"`
 }
 
 // Status is a point-in-time view for `hop ls`.
 type Status struct {
-	Spec        Spec      `json:"spec"`
-	State       State     `json:"state"`
+	Spec  Spec  `json:"spec"`
+	State State `json:"state"`
+	// CreatedAt is when the tunnel was opened. Unlike Since it never moves,
+	// which is what "most recently opened" needs to mean.
+	CreatedAt   time.Time `json:"created_at"`
 	Since       time.Time `json:"since"`
 	Retries     int       `json:"retries"`
 	LastError   string    `json:"last_error,omitempty"`
@@ -91,6 +103,7 @@ type Tunnel struct {
 	mu          sync.Mutex
 	state       State
 	since       time.Time
+	createdAt   time.Time
 	retries     int
 	lastErr     string
 	containerIP string
@@ -107,13 +120,14 @@ func New(spec Spec, deps Deps) *Tunnel {
 		deps.Clock = RealClock()
 	}
 	return &Tunnel{
-		spec:    spec,
-		deps:    deps,
-		back:    NewBackoff(deps.Seed),
-		state:   StateResolving,
-		since:   deps.Clock.Now(),
-		recycle: make(chan struct{}, 1),
-		stop:    make(chan struct{}),
+		spec:      spec,
+		deps:      deps,
+		back:      NewBackoff(deps.Seed),
+		state:     StateResolving,
+		since:     deps.Clock.Now(),
+		createdAt: deps.Clock.Now(),
+		recycle:   make(chan struct{}, 1),
+		stop:      make(chan struct{}),
 	}
 }
 
@@ -121,7 +135,7 @@ func (t *Tunnel) Status() Status {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return Status{
-		Spec: t.spec, State: t.state, Since: t.since,
+		Spec: t.spec, State: t.state, Since: t.since, CreatedAt: t.createdAt,
 		Retries: t.retries, LastError: t.lastErr, ContainerIP: t.containerIP,
 	}
 }
