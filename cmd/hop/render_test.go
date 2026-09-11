@@ -138,3 +138,49 @@ func TestRenderTableSavedStateIsDimmedWithColour(t *testing.T) {
 		t.Fatalf("saved state not dimmed:\n%q", buf.String())
 	}
 }
+
+// stripANSI removes colour escapes so visible column positions can be compared.
+func stripANSI(s string) string {
+	var out strings.Builder
+	inEscape := false
+	for _, r := range s {
+		switch {
+		case r == '\x1b':
+			inEscape = true
+		case inEscape && r == 'm':
+			inEscape = false
+		case !inEscape:
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
+}
+
+// Colour escapes are invisible, so they must not count as width: every
+// column has to start at the same visible offset in the header and in each
+// row, with colour on and off alike.
+func TestRenderTableColumnsAlignWithColourOn(t *testing.T) {
+	named := redisSpec()
+	named.Name = "redis-stg"
+	rows := []tunnel.Status{healthy(named)}
+
+	var plain, coloured bytes.Buffer
+	renderTable(&plain, rows, false)
+	renderTable(&coloured, rows, true)
+
+	plainLines := strings.Split(strings.TrimRight(plain.String(), "\n"), "\n")
+	colourLines := strings.Split(strings.TrimRight(coloured.String(), "\n"), "\n")
+
+	for i := range plainLines {
+		got := stripANSI(colourLines[i])
+		if got != plainLines[i] {
+			t.Fatalf("line %d differs once colour is stripped:\n  plain:    %q\n  coloured: %q",
+				i, plainLines[i], got)
+		}
+	}
+
+	header, row := plainLines[0], stripANSI(colourLines[1])
+	if strings.Index(header, "HOST") != strings.Index(row, "example-tracker-dev") {
+		t.Fatalf("HOST column misaligned:\n%s\n%s", header, row)
+	}
+}

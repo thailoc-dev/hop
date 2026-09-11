@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"text/tabwriter"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 	"github.com/thailoc-dev/hop/internal/tunnel"
@@ -83,14 +84,57 @@ func shortDuration(d time.Duration) string {
 	}
 }
 
+// cell is one table entry: the text that occupies width, and the colour it
+// is painted in. Keeping them apart is what lets columns line up with colour
+// on — tabwriter cannot, because it counts the invisible escape bytes.
+type cell struct {
+	text   string
+	colour string
+}
+
+// renderColumns lays out rows with two spaces between columns, padding by
+// visible width and applying colour only after the padding is computed.
+func renderColumns(w io.Writer, header []string, rows [][]cell, colour bool) {
+	widths := make([]int, len(header))
+	for i, h := range header {
+		widths[i] = utf8.RuneCountInString(h)
+	}
+	for _, row := range rows {
+		for i, c := range row {
+			if n := utf8.RuneCountInString(c.text); n > widths[i] {
+				widths[i] = n
+			}
+		}
+	}
+
+	line := func(cells []cell) {
+		for i, c := range cells {
+			fmt.Fprint(w, paint(c.text, c.colour, colour))
+			if i < len(cells)-1 {
+				fmt.Fprint(w, strings.Repeat(" ", widths[i]-utf8.RuneCountInString(c.text)+2))
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	plainHeader := make([]cell, len(header))
+	for i, h := range header {
+		plainHeader[i] = cell{text: h}
+	}
+	line(plainHeader)
+	for _, row := range rows {
+		line(row)
+	}
+}
+
 func renderTable(w io.Writer, statuses []tunnel.Status, colour bool) {
 	if len(statuses) == 0 {
 		fmt.Fprintln(w, "no tunnels")
 		return
 	}
 
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tLOCAL\tENV\tHOST\tCONTAINER\tREMOTE\tSTATE\tSINCE\tRETRIES")
+	header := []string{"NAME", "LOCAL", "ENV", "HOST", "CONTAINER", "REMOTE", "STATE", "SINCE", "RETRIES"}
+	rows := make([][]cell, 0, len(statuses))
 
 	for _, st := range statuses {
 		env := st.Spec.Env
@@ -99,28 +143,33 @@ func renderTable(w io.Writer, statuses []tunnel.Status, colour bool) {
 		}
 
 		since, retries := "\u2014", "\u2014"
-		state := string(st.State)
+		state := cell{text: string(st.State)}
 		switch st.State {
 		case tunnel.StateSaved:
 			// Not running: no runtime columns, and the state itself is muted so
 			// the eye lands on what is actually up.
-			state = paint(state, ansiDim, colour)
+			state.colour = ansiDim
 		default:
 			retries = fmt.Sprintf("%d", st.Retries)
 			if st.State == tunnel.StateHealthy && !st.Since.IsZero() {
 				since = shortDuration(time.Since(st.Since))
 			}
 			if st.State == tunnel.StateRetrying && st.LastError != "" {
-				state = paint(state, ansiDim, colour)
+				state.colour = ansiDim
 			}
 		}
 
-		fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
-			st.Spec.Name,
-			st.Spec.LocalPort,
-			paint(env, colourFor(st.Spec.Env), colour),
-			st.Spec.Host, st.Spec.Container, st.Spec.RemotePort,
-			state, since, retries)
+		rows = append(rows, []cell{
+			{text: st.Spec.Name},
+			{text: fmt.Sprintf("%d", st.Spec.LocalPort)},
+			{text: env, colour: colourFor(st.Spec.Env)},
+			{text: st.Spec.Host},
+			{text: st.Spec.Container},
+			{text: fmt.Sprintf("%d", st.Spec.RemotePort)},
+			state,
+			{text: since},
+			{text: retries},
+		})
 	}
-	_ = tw.Flush()
+	renderColumns(w, header, rows, colour)
 }
