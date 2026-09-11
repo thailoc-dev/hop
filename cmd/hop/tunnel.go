@@ -18,12 +18,14 @@ import (
 // hostname. See the spec's disambiguation rule.
 var reservedWords = map[string]bool{
 	"ls": true, "down": true, "logs": true, "restart": true, "tunnel": true,
+	"up": true, "save": true, "forget": true,
 	"run": true, "shell": true, "push": true, "pull": true, "docker-ip": true,
 	"version": true, "help": true, "completion": true,
 }
 
-const usageForms = "hop <host> <container> <remote-port> <local-port>\n" +
-	"       hop ls | down <local-port> | logs <local-port> | restart <local-port>"
+const usageForms = "hop <name>                                         open a saved tunnel\n" +
+	"       hop <host> <container> <remote-port> <local-port>   open a tunnel\n" +
+	"       hop ls | down <name|port> | logs <name|port> | restart <name|port>"
 
 func parsePort(value, name string) (int, error) {
 	port, err := strconv.Atoi(value)
@@ -39,7 +41,8 @@ func parsePort(value, name string) (int, error) {
 func parseTunnelArgs(args []string) (tunnel.Spec, error) {
 	if len(args) != 4 {
 		return tunnel.Spec{}, fail(exitUsage,
-			"expected 4 arguments, got %d\n\nUsage: %s", len(args), usageForms)
+			"expected 1 argument (a saved name) or 4 (a tunnel spec), got %d\n\nUsage: %s",
+			len(args), usageForms)
 	}
 
 	remotePort, err := parsePort(args[2], "remote-port")
