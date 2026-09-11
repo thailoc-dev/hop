@@ -79,13 +79,29 @@ hop version
 
 ### 3. Tab completion (optional but recommended)
 
-Completes hosts, containers, ports and saved tunnel names:
+Completes hosts, containers, ports and saved tunnel names. Add one line to
+`~/.zshrc`, **after** `compinit` runs (oh-my-zsh does that for you; in a
+hand-written `.zshrc`, put it at the end):
 
 ```bash
-hop completion zsh > "${fpath[1]}/_hop"   # then restart the shell
+eval "$(hop completion zsh)"
 ```
 
-`bash` and `fish` are also supported.
+Then `exec zsh`. This costs about 18 ms per new shell and is always in sync
+with the installed binary — the script only delegates to `hop __complete` at
+Tab time, so there is no file to regenerate after an upgrade.
+
+If you would rather pay nothing at shell start, write the script into a
+directory on your `fpath` instead — but pick the directory deliberately:
+`${fpath[1]}` is whatever happens to be first, and under oh-my-zsh that is
+usually a plugin's folder.
+
+```bash
+mkdir -p ~/.zfunc && hop completion zsh > ~/.zfunc/_hop
+# and in ~/.zshrc, BEFORE compinit:  fpath=(~/.zfunc $fpath)
+```
+
+`bash` and `fish` are also supported: `hop completion bash`, `hop completion fish`.
 
 ## Usage
 
