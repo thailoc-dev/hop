@@ -10,6 +10,13 @@ test:
 
 install: build
 	install -m 0755 bin/hop $(HOME)/.local/bin/hop
+	@# A different hop earlier on PATH would silently shadow this one. Twice a
+	@# stale copy has been mistaken for a bug; say so at the moment it matters.
+	@resolved=$$(command -v hop 2>/dev/null); \
+	if [ -n "$$resolved" ] && [ "$$resolved" != "$(HOME)/.local/bin/hop" ]; then \
+		echo "WARNING: 'hop' on your PATH resolves to $$resolved, not the one just installed."; \
+		echo "         Remove it or reorder PATH, or the next run will not be this build."; \
+	fi
 
 # The rule is about production code: nothing outside sshexec, sysprobe and
 # connect.go (where hop re-executes itself) may spawn a process. Test files are
