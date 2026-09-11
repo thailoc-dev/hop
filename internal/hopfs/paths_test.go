@@ -49,3 +49,10 @@ func TestSocketBudgetIs86Bytes(t *testing.T) {
 		t.Fatalf("SocketDir = %q, want %q", got, dir)
 	}
 }
+
+func TestCatalogueFileLivesInTheRoot(t *testing.T) {
+	p := New("/Users/loc", 501)
+	if p.CatalogueFile != "/Users/loc/.hop/tunnels.json" {
+		t.Fatalf("CatalogueFile = %q", p.CatalogueFile)
+	}
+}

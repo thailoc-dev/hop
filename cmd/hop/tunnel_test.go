@@ -110,3 +110,41 @@ func TestBareFormIsNotConfusedWithASubcommand(t *testing.T) {
 		t.Fatalf("Host = %q", spec.Host)
 	}
 }
+
+func TestBareFormDispatchesByArgumentCount(t *testing.T) {
+	// One argument is a saved name; four is a spec; anything else is a usage
+	// error that names all the forms. With an empty catalogue, a one-argument
+	// call reaching the name lookup proves the dispatch without a daemon.
+	home := shortTempDir(t)
+	t.Setenv("HOME", home)
+
+	_, err := runCmd(t, home, "redis-stg")
+	if err == nil || !strings.Contains(err.Error(), `no saved tunnel named "redis-stg"`) {
+		t.Fatalf("one argument did not reach openSaved: %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"h", "c"},
+		{"h", "c", "27017"},
+		{"h", "c", "27017", "27018", "extra"},
+	} {
+		_, err := runCmd(t, home, args...)
+		if err == nil {
+			t.Fatalf("%d arguments accepted", len(args))
+		}
+		msg := err.Error()
+		for _, form := range []string{"hop <name>", "hop <host>"} {
+			if !strings.Contains(msg, form) {
+				t.Fatalf("%d-argument error %q does not name form %q", len(args), msg, form)
+			}
+		}
+	}
+}
+
+func TestReservedWordsIncludeTheNewSubcommands(t *testing.T) {
+	for _, word := range []string{"up", "save", "forget"} {
+		if !reservedWords[word] {
+			t.Fatalf("%q is not reserved; a saved tunnel could shadow it", word)
+		}
+	}
+}

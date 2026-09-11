@@ -13,10 +13,14 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
+			switch len(args) {
+			case 0:
 				return cmd.Help()
+			case 1:
+				return openSaved(cmd, args[0])
+			default:
+				return openTunnel(cmd, args)
 			}
-			return openTunnel(cmd, args)
 		},
 	}
 	root.PersistentFlags().Bool("json", false, "machine-readable output")
@@ -29,6 +33,8 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDaemonCmd())
 	root.AddCommand(newWarmCmd())
 	root.AddCommand(newTunnelCmd())
+	root.AddCommand(newUpCmd())
+	root.AddCommand(newSaveCmd(), newForgetCmd())
 	root.AddCommand(newLsCmd())
 	root.AddCommand(newDownCmd(), newRestartCmd(), newLogsCmd())
 	root.AddCommand(newRunCmd(), newShellCmd(), newPushCmd(), newPullCmd(), newDockerIPCmd())

@@ -28,20 +28,36 @@ func renderEvents(w io.Writer, events []tunnel.Event, colour bool) {
 
 func newLogsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "logs <local-port>",
+		Use:   "logs <name|local-port>",
 		Short: "Show a tunnel's state transitions",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			port, err := parsePort(args[0], "local-port")
-			if err != nil {
-				return err
-			}
 			limit, _ := cmd.Flags().GetInt("lines")
 			follow, _ := cmd.Flags().GetBool("follow")
 
 			paths, err := hopfs.Default()
 			if err != nil {
 				return err
+			}
+
+			var port int
+			if isPort(args[0]) {
+				if port, err = parsePort(args[0], "local-port"); err != nil {
+					return err
+				}
+			} else {
+				client, err := control.Dial(paths.ControlSock)
+				if err != nil {
+					return fail(exitNoDaemon, "no hop daemon is running")
+				}
+				list, err := client.Send(control.Request{Op: control.OpList})
+				_ = client.Close()
+				if err != nil {
+					return fail(exitInternal, "talk to the daemon: %v", err)
+				}
+				if port, err = resolveTarget(paths, list.Statuses, args[0]); err != nil {
+					return err
+				}
 			}
 
 			seen := 0
@@ -73,7 +89,7 @@ func newLogsCmd() *cobra.Command {
 			}
 		},
 	}
-	cmd.ValidArgsFunction = completeLocalPorts
+	cmd.ValidArgsFunction = completeTargets
 	cmd.Flags().BoolP("follow", "f", false, "keep printing new events")
 	cmd.Flags().IntP("lines", "n", 0, "show only the last N events")
 	return cmd

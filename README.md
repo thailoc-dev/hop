@@ -64,15 +64,35 @@ stops the tunnel.
 | `--env <name>` | inferred | Environment label: `dev`, `stg`, `prod` |
 | `--wait <dur>` | `10s` | How long to wait for the tunnel to become healthy |
 
+### Save it under a name
+
+```bash
+hop example-tracker-dev tracker_redis_staging 6379 46379 --name redis-stg
+# or, after opening it the long way:
+hop save redis-stg            # names the most recently opened tunnel
+hop save redis-stg 46379      # or a specific one
+
+hop redis-stg                 # from now on
+hop up redis-stg              # same thing, explicit
+hop forget redis-stg          # remove the name; a running instance keeps running
+```
+
+Names are lower-case letters, digits, `-` and `_`, and must contain a
+non-digit so they can never be mistaken for a port. Saving an existing name
+overwrites it — that is how you change a saved tunnel's ports.
+
+`down`, `logs` and `restart` accept a name wherever they accept a port, and
+`hop ls` shows saved tunnels that are not running as `saved` rows.
+
 ### Manage tunnels
 
 | Command | Does |
 |---|---|
 | `hop ls` | List tunnels, dialling each port to report the truth |
-| `hop down <local-port>` | Stop one tunnel |
+| `hop down <name\|port>` | Stop one tunnel |
 | `hop down --all` | Stop every tunnel |
-| `hop logs <local-port> [-f]` | Show state transitions |
-| `hop restart <local-port>` | Rebuild it, re-resolving the container address |
+| `hop logs <name\|port> [-f]` | Show state transitions |
+| `hop restart <name\|port>` | Rebuild it, re-resolving the container address |
 
 Tunnels are addressed by **local port** — it is unique per tunnel, and it is
 the number you type into your database client anyway.
@@ -147,7 +167,8 @@ your database.
 
 ```
 ~/.hop/
-├── state.json      tunnel definitions, written atomically
+├── state.json      running tunnels, written atomically
+├── tunnels.json    saved, named tunnels (the CLI's; the daemon never reads it)
 ├── ctl.sock        control socket
 ├── daemon.lock     spawn lock
 ├── daemon.log      supervisor log, rotated at 5 MB

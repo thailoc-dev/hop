@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -377,5 +378,49 @@ func TestForwardThatNeverBindsIsRetried(t *testing.T) {
 	}
 	if first := ex.LastForward(); first == nil {
 		t.Fatal("no forward recorded")
+	}
+}
+
+func TestCreatedAtIsSetOnceAndSurvivesTransitions(t *testing.T) {
+	h := newHarness(t)
+	h.waitState(t, StateHealthy)
+	created := h.tun.Status().CreatedAt
+	if created.IsZero() {
+		t.Fatal("CreatedAt is zero")
+	}
+
+	// A reconnect moves Since but must not move CreatedAt: `hop save` picks
+	// the most recently OPENED tunnel, and a reconnect is not an open.
+	h.clock.Advance(time.Minute)
+	h.exec.LastForward().EmitStderr("Connection closed by remote host")
+	h.exec.LastForward().Die()
+	h.waitState(t, StateRetrying)
+
+	if got := h.tun.Status().CreatedAt; !got.Equal(created) {
+		t.Fatalf("CreatedAt moved from %v to %v on a state transition", created, got)
+	}
+	if h.tun.Status().Since.Equal(created) {
+		t.Fatal("Since did not move; the test premise is wrong")
+	}
+}
+
+func TestSpecNameRoundTripsThroughJSON(t *testing.T) {
+	in := Spec{Host: "h", Container: "c", RemotePort: 1, LocalPort: 2, Name: "redis-stg"}
+	data, err := json.Marshal(in)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var out Spec
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Name != "redis-stg" {
+		t.Fatalf("Name = %q", out.Name)
+	}
+	// Unnamed specs must not grow a "name": "" field, so existing state files
+	// stay byte-identical when nothing was named.
+	data, _ = json.Marshal(Spec{Host: "h"})
+	if strings.Contains(string(data), `"name"`) {
+		t.Fatalf("empty name serialised: %s", data)
 	}
 }

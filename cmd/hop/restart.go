@@ -8,21 +8,31 @@ import (
 
 func newRestartCmd() *cobra.Command {
 	return &cobra.Command{
-		ValidArgsFunction: completeLocalPorts,
-		Use:               "restart <local-port>",
+		ValidArgsFunction: completeTargets,
+		Use:               "restart <name|local-port>",
 		Short:             "Rebuild a tunnel, re-resolving the container address",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			port, err := parsePort(args[0], "local-port")
-			if err != nil {
-				return err
-			}
-
 			paths, err := hopfs.Default()
 			if err != nil {
 				return err
 			}
 			client, err := connect(paths)
+			if err != nil {
+				return err
+			}
+			list, err := client.Send(control.Request{Op: control.OpList})
+			_ = client.Close()
+			if err != nil {
+				return fail(exitInternal, "talk to the daemon: %v", err)
+			}
+			port, err := resolveTarget(paths, list.Statuses, args[0])
+			if err != nil {
+				return err
+			}
+
+			// The control protocol is one request per connection.
+			client, err = connect(paths)
 			if err != nil {
 				return err
 			}

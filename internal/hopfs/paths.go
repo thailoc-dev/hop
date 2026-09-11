@@ -22,14 +22,15 @@ const longestSocketName = "cmd-0123456789abcdef.sock"
 
 // Paths is the resolved location of every file hop owns.
 type Paths struct {
-	Root        string // ~/.hop
-	StateFile   string // ~/.hop/state.json
-	ControlSock string // ~/.hop/ctl.sock
-	LockFile    string // ~/.hop/daemon.lock
-	DaemonLog   string // ~/.hop/daemon.log
-	LogDir      string // ~/.hop/logs
-	CacheDir    string // ~/.hop/cache
-	SocketDir   string // ~/.hop/ctl, or /tmp/hop-<uid> when the budget is blown
+	Root          string // ~/.hop
+	StateFile     string // ~/.hop/state.json
+	ControlSock   string // ~/.hop/ctl.sock
+	LockFile      string // ~/.hop/daemon.lock
+	DaemonLog     string // ~/.hop/daemon.log
+	LogDir        string // ~/.hop/logs
+	CacheDir      string // ~/.hop/cache
+	CatalogueFile string // ~/.hop/tunnels.json — saved, named tunnels
+	SocketDir     string // ~/.hop/ctl, or /tmp/hop-<uid> when the budget is blown
 }
 
 // New resolves paths for the given home directory and uid. It is pure, so
@@ -43,14 +44,15 @@ func New(home string, uid int) Paths {
 	}
 
 	return Paths{
-		Root:        root,
-		StateFile:   filepath.Join(root, "state.json"),
-		ControlSock: filepath.Join(root, "ctl.sock"),
-		LockFile:    filepath.Join(root, "daemon.lock"),
-		DaemonLog:   filepath.Join(root, "daemon.log"),
-		LogDir:      filepath.Join(root, "logs"),
-		CacheDir:    filepath.Join(root, "cache"),
-		SocketDir:   socketDir,
+		Root:          root,
+		StateFile:     filepath.Join(root, "state.json"),
+		ControlSock:   filepath.Join(root, "ctl.sock"),
+		LockFile:      filepath.Join(root, "daemon.lock"),
+		DaemonLog:     filepath.Join(root, "daemon.log"),
+		LogDir:        filepath.Join(root, "logs"),
+		CacheDir:      filepath.Join(root, "cache"),
+		CatalogueFile: filepath.Join(root, "tunnels.json"),
+		SocketDir:     socketDir,
 	}
 }
 
