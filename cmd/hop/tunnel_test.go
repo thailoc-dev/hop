@@ -113,13 +113,13 @@ func TestBareFormIsNotConfusedWithASubcommand(t *testing.T) {
 
 func TestBareFormDispatchesByArgumentCount(t *testing.T) {
 	// One argument is a saved name; four is a spec; anything else is a usage
-	// error that names all the forms. openSaved is stubbed until Task 3, so a
-	// one-argument call reaching it proves the dispatch without the daemon.
+	// error that names all the forms. With an empty catalogue, a one-argument
+	// call reaching the name lookup proves the dispatch without a daemon.
 	home := shortTempDir(t)
 	t.Setenv("HOME", home)
 
 	_, err := runCmd(t, home, "redis-stg")
-	if err == nil || !strings.Contains(err.Error(), "not implemented") {
+	if err == nil || !strings.Contains(err.Error(), `no saved tunnel named "redis-stg"`) {
 		t.Fatalf("one argument did not reach openSaved: %v", err)
 	}
 

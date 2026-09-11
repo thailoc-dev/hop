@@ -73,6 +73,16 @@ func openTunnel(cmd *cobra.Command, args []string) error {
 		spec.Env = override
 	}
 
+	// --name is open-then-save. Validate first so a bad name has no side
+	// effects; save after the open succeeds so a failed open saves nothing.
+	name, _ := cmd.Flags().GetString("name")
+	if name != "" {
+		if err := validateName(name); err != nil {
+			return err
+		}
+		spec.Name = name
+	}
+
 	paths, err := hopfs.Default()
 	if err != nil {
 		return err
@@ -110,6 +120,11 @@ func openTunnel(cmd *cobra.Command, args []string) error {
 		return fail(exitNotReady,
 			"tunnel is %s after %s; it keeps retrying in the background (hop logs %d)",
 			status.State, wait, spec.LocalPort)
+	}
+	if name != "" {
+		if err := saveToCatalogue(paths, name, spec); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -154,8 +169,12 @@ func waitForHealthy(paths hopfs.Paths, localPort int, wait time.Duration) (tunne
 
 func renderOpened(cmd *cobra.Command, status tunnel.Status) string {
 	label := envLabel(cmd, status.Spec.Env)
+	what := status.Spec.Container
+	if status.Spec.Name != "" {
+		what = fmt.Sprintf("%s (%s)", status.Spec.Name, status.Spec.Container)
+	}
 	return fmt.Sprintf("  %s %s  →  localhost:%d   %s\n",
-		label, status.Spec.Container, status.Spec.LocalPort, status.State)
+		label, what, status.Spec.LocalPort, status.State)
 }
 
 // attachPoll is how often an attached tunnel asks for new events.
@@ -231,6 +250,7 @@ func addTunnelFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("env", "e", "", "environment label (dev, stg, prod); inferred when omitted")
 	cmd.Flags().Duration("wait", 10*time.Second, "how long to wait for the tunnel to become healthy")
 	cmd.Flags().BoolP("attach", "a", false, "stay in the foreground and stream state changes")
+	cmd.Flags().String("name", "", "save the tunnel under this name once it is up")
 
 	_ = cmd.RegisterFlagCompletionFunc("env",
 		func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {

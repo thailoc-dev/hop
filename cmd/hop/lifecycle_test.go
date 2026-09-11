@@ -25,6 +25,18 @@ func (h *recordingHandler) Handle(req control.Request) control.Response {
 	return h.resp
 }
 
+// listenUnix opens the control socket for a fake daemon and closes it when
+// the test ends.
+func listenUnix(t *testing.T, path string) (net.Listener, error) {
+	t.Helper()
+	l, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	return l, nil
+}
+
 // serveFakeDaemon listens on the paths' control socket and returns the handler.
 func serveFakeDaemon(t *testing.T, p hopfs.Paths, resp control.Response) *recordingHandler {
 	t.Helper()

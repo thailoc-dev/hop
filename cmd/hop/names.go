@@ -1,8 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
+	"slices"
 
+	"github.com/locnguyen/hop/internal/control"
+	"github.com/locnguyen/hop/internal/hopfs"
+	"github.com/locnguyen/hop/internal/sshconfig"
+	"github.com/locnguyen/hop/internal/store"
+	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +53,124 @@ func validateName(name string) error {
 	return nil
 }
 
-// openSaved opens a tunnel from the catalogue by name. Replaced in Task 3.
-func openSaved(_ *cobra.Command, _ string) error {
-	return fail(exitInternal, "not implemented")
+// sameTunnel reports whether two specs describe the same forward. Name and Env
+// are labels, not identity.
+func sameTunnel(a, b tunnel.Spec) bool {
+	return a.Host == b.Host && a.Container == b.Container &&
+		a.RemotePort == b.RemotePort && a.LocalPort == b.LocalPort
+}
+
+// saveToCatalogue validates the name, stamps it on the spec, and upserts.
+// Saving an existing name overwrites it: that is how a saved tunnel's ports
+// are changed.
+func saveToCatalogue(paths hopfs.Paths, name string, spec tunnel.Spec) error {
+	if err := validateName(name); err != nil {
+		return err
+	}
+	if err := paths.EnsureDirs(); err != nil {
+		return err
+	}
+	c, err := store.LoadCatalogue(paths.CatalogueFile)
+	if err != nil {
+		return err
+	}
+	spec.Name = name
+	c.Tunnels[name] = spec
+	return store.SaveCatalogue(paths.CatalogueFile, c)
+}
+
+// openSaved opens a catalogue entry by name. Downstream it is exactly the
+// four-argument open: the same add request, the same wait, the same output.
+func openSaved(cmd *cobra.Command, name string) error {
+	paths, err := hopfs.Default()
+	if err != nil {
+		return err
+	}
+	c, err := store.LoadCatalogue(paths.CatalogueFile)
+	if err != nil {
+		return err
+	}
+
+	spec, ok := c.Tunnels[name]
+	if !ok {
+		return unknownNameError(name)
+	}
+	if override, _ := cmd.Flags().GetString("env"); override != "" {
+		spec.Env = override // this run only; the catalogue is not rewritten
+	}
+
+	client, err := connect(paths)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close() }()
+
+	// Asking for something you already have is not an error.
+	list, err := client.Send(control.Request{Op: control.OpList})
+	if err != nil {
+		return fail(exitInternal, "talk to the daemon: %v", err)
+	}
+	for _, st := range list.Statuses {
+		if st.Spec.Name == name || sameTunnel(st.Spec, spec) {
+			cmd.Printf("%s is already running on %d\n", name, st.Spec.LocalPort)
+			return nil
+		}
+	}
+
+	// The control protocol is one request per connection.
+	_ = client.Close()
+	if client, err = connect(paths); err != nil {
+		return err
+	}
+	resp, err := client.Send(control.Request{Op: control.OpAdd, Spec: &spec})
+	if err != nil {
+		return fail(exitInternal, "talk to the daemon: %v", err)
+	}
+	if !resp.OK {
+		return fail(exitFatal, "%s", resp.Error)
+	}
+
+	wait, _ := cmd.Flags().GetDuration("wait")
+	status, err := waitForHealthy(paths, spec.LocalPort, wait)
+	if err != nil {
+		return err
+	}
+	if quiet, _ := cmd.Flags().GetBool("quiet"); !quiet {
+		cmd.Print(renderOpened(cmd, status))
+	}
+	if attach, _ := cmd.Flags().GetBool("attach"); attach {
+		return attachTunnel(cmd, paths, spec.LocalPort)
+	}
+	if status.State != tunnel.StateHealthy {
+		return fail(exitNotReady,
+			"tunnel is %s after %s; it keeps retrying in the background (hop logs %s)",
+			status.State, wait, name)
+	}
+	return nil
+}
+
+// unknownNameError explains a miss. If the name is an ssh host alias, the
+// likely mistake is trying to open a host with one argument, so say so.
+func unknownNameError(name string) error {
+	msg := fmt.Sprintf("no saved tunnel named %q", name)
+	if path, err := sshconfig.DefaultPath(); err == nil {
+		if hosts, err := sshconfig.Hosts(path); err == nil && slices.Contains(hosts, name) {
+			msg += fmt.Sprintf("\n%q is an ssh host; to open a tunnel to it use:\n  hop %s <container> <remote-port> <local-port>",
+				name, name)
+		}
+	}
+	return fail(exitUsage, "%s", msg)
+}
+
+func newUpCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "up <name>",
+		Short: "Open a saved tunnel (explicit form of `hop <name>`)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return openSaved(cmd, args[0])
+		},
+	}
+	addTunnelFlags(cmd)
+	return cmd
 }
