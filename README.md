@@ -30,15 +30,45 @@ rebuilds affected tunnels immediately.
 
 ## Install
 
-**Requirements:** macOS, an `ssh` that reads `~/.ssh/config`, and Go 1.25 to
-build (pinned in `.mise.toml`). `cobra` is the only dependency.
+**Requirements:** macOS and an `ssh` that reads `~/.ssh/config`. Building
+needs Go 1.25; `cobra` is the only dependency.
+
+### 1. Get Go
+
+Pick one. The project pins Go 1.25.0 in `.mise.toml`, so `mise` picks the
+right version automatically inside the repo:
 
 ```bash
+# with mise (recommended — honours the pinned version)
+brew install mise
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc && exec zsh
+cd hop && mise install        # installs Go 1.25.0 from .mise.toml
+
+# or with Homebrew
+brew install go
+
+# or from https://go.dev/dl — the macOS .pkg installer
+```
+
+Check with `go version`; it must print 1.25 or newer. Then make sure
+`~/.local/bin` is on your PATH, since that is where hop installs:
+
+```bash
+grep -q '.local/bin' ~/.zshrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+```
+
+### 2. Build and install hop
+
+```bash
+git clone https://github.com/thailoc-dev/hop.git
+cd hop
 make install          # builds ./bin/hop, installs to ~/.local/bin/hop
 hop version
 ```
 
-Optional but recommended — tab completion for hosts, containers and ports:
+### 3. Tab completion (optional but recommended)
+
+Completes hosts, containers, ports and saved tunnel names:
 
 ```bash
 hop completion zsh > "${fpath[1]}/_hop"   # then restart the shell
