@@ -1,4 +1,4 @@
-module github.com/locnguyen/hop
+module github.com/thailoc-dev/hop
 
 go 1.25.0
 

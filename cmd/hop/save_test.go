@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func TestSaveWithNoPortTakesTheMostRecentlyOpened(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 type stubHandler struct{ last Request }

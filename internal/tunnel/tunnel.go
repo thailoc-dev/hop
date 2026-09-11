@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/locnguyen/hop/internal/sshexec"
-	"github.com/locnguyen/hop/internal/sysprobe"
+	"github.com/thailoc-dev/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/sysprobe"
 )
 
 const (

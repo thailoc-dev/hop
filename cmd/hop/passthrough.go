@@ -6,9 +6,9 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/sshexec"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/sshexec"
 )
 
 // sshArgvFor builds the exact argv a passthrough command will exec.

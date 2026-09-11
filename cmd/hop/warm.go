@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/locnguyen/hop/internal/complete"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/sshexec"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/complete"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/sshexec"
 )
 
 // warmTimeout bounds the background fetch. It is generous because nothing is

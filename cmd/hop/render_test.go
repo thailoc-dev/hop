@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func statuses() []tunnel.Status {

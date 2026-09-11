@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // CurrentVersion is bumped when an on-disk shape changes incompatibly.

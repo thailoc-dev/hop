@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/sshexec"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/sysprobe"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/sysprobe"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // WatchInterval is how often the supervisor checks for a system wake or a

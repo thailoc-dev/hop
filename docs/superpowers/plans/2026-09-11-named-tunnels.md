@@ -274,7 +274,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // CurrentVersion is bumped when an on-disk shape changes incompatibly.
@@ -695,10 +695,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // scriptedHandler answers each control operation with its own canned
@@ -1180,9 +1180,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func TestSaveWithNoPortTakesTheMostRecentlyOpened(t *testing.T) {
@@ -1353,10 +1353,10 @@ Expected: FAIL — `undefined: newestStatus`; `save`/`forget` unknown commands.
 package main
 
 import (
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -1505,8 +1505,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func TestResolveTargetPassesAPortThrough(t *testing.T) {
@@ -1747,9 +1747,9 @@ package main
 import (
 	"sort"
 
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // resolveTarget turns a name-or-port argument into a local port.

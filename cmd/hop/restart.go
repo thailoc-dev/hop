@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
 )
 
 func newRestartCmd() *cobra.Command {

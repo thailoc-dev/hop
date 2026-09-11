@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/locnguyen/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/sshexec"
 )
 
 // Timeout is the hard ceiling on any network-backed completion.

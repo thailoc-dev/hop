@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
 )
 
 // spawnWait is how long to wait for a freshly spawned daemon to start

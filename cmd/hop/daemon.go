@@ -8,12 +8,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/sshexec"
-	"github.com/locnguyen/hop/internal/supervisor"
-	"github.com/locnguyen/hop/internal/sysprobe"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/supervisor"
+	"github.com/thailoc-dev/hop/internal/sysprobe"
 )
 
 func newDaemonCmd() *cobra.Command {

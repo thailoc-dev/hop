@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func TestResolveTargetPassesAPortThrough(t *testing.T) {

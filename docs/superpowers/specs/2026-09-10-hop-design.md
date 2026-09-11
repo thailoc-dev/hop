@@ -402,7 +402,7 @@ hermetically — no VPS, no network, no real sleeping.
 
 ## Dependencies
 
-Module path `github.com/locnguyen/hop`, Go 1.25+.
+Module path `github.com/thailoc-dev/hop`, Go 1.25+.
 `github.com/spf13/cobra` for the command tree, help text, and the completion
 scripts. Everything else is standard
 library: `text/tabwriter` for tables, a small internal ANSI helper for colour,

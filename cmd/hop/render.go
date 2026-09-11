@@ -7,8 +7,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // ANSI colours. Constants rather than a dependency: hop needs four.

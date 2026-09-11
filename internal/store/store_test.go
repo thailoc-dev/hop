@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func spec(port int) tunnel.Spec {

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // newestStatus picks the most recently OPENED tunnel — by CreatedAt, which

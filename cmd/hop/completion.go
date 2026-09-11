@@ -7,14 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/locnguyen/hop/internal/complete"
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/sshconfig"
-	"github.com/locnguyen/hop/internal/sshexec"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/complete"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/sshconfig"
+	"github.com/thailoc-dev/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // warmFunc schedules the out-of-band container fetch. It is a variable so

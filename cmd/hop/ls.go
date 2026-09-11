@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/store"
-	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 const probeTimeout = 500 * time.Millisecond

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/locnguyen/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/sshexec"
 )
 
 func TestContainersQueriesAndCaches(t *testing.T) {

@@ -57,7 +57,18 @@ Check with `go version`; it must print 1.25 or newer. Then make sure
 grep -q '.local/bin' ~/.zshrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 ```
 
-### 2. Build and install hop
+### 2. Install hop
+
+The short way, once Go is on your PATH:
+
+```bash
+go install github.com/thailoc-dev/hop/cmd/hop@latest
+hop version
+```
+
+That puts the binary in `$(go env GOPATH)/bin` — usually `~/go/bin` — so
+make sure that directory is on your PATH too. Or build from a clone, which
+is what you want if you intend to change anything:
 
 ```bash
 git clone https://github.com/thailoc-dev/hop.git

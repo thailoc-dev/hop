@@ -8,10 +8,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // reservedWords are the first arguments that mean a subcommand rather than a

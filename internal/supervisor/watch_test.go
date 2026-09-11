@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/locnguyen/hop/internal/sshexec"
-	"github.com/locnguyen/hop/internal/sysprobe"
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/sshexec"
+	"github.com/thailoc-dev/hop/internal/sysprobe"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func newWatchSup(t *testing.T) (*Supervisor, *sshexec.Fake, *sysprobe.Fake, *tunnel.FakeClock) {

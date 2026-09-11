@@ -3,7 +3,7 @@
 // No RPC framework: the whole protocol is seven operations.
 package control
 
-import "github.com/locnguyen/hop/internal/tunnel"
+import "github.com/thailoc-dev/hop/internal/tunnel"
 
 // Operations.
 const (

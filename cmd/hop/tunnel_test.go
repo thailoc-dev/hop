@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/locnguyen/hop/internal/tunnel"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func TestParseTunnelArgs(t *testing.T) {

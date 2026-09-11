@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/locnguyen/hop/internal/complete"
-	"github.com/locnguyen/hop/internal/control"
-	"github.com/locnguyen/hop/internal/hopfs"
-	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
+	"github.com/thailoc-dev/hop/internal/complete"
+	"github.com/thailoc-dev/hop/internal/control"
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 func writeSSHConfig(t *testing.T, home, body string) {
