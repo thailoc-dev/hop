@@ -8,6 +8,7 @@ import (
 
 	"github.com/locnguyen/hop/internal/control"
 	"github.com/locnguyen/hop/internal/hopfs"
+	"github.com/locnguyen/hop/internal/store"
 	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
 )
@@ -40,30 +41,34 @@ func newLsCmd() *cobra.Command {
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 
-			client, err := control.Dial(paths.ControlSock)
+			catalogue, err := store.LoadCatalogue(paths.CatalogueFile)
 			if err != nil {
-				// No daemon means no tunnels, which is an answer, not a failure.
-				if asJSON {
-					cmd.Println("[]")
-					return nil
-				}
-				renderTable(cmd.OutOrStdout(), nil, false)
-				return nil
-			}
-			resp, err := client.Send(control.Request{Op: control.OpList})
-			_ = client.Close()
-			if err != nil {
-				return fail(exitInternal, "talk to the daemon: %v", err)
+				return err
 			}
 
-			statuses := probeAll(paths, resp.Statuses)
+			var running []tunnel.Status
+			if client, err := control.Dial(paths.ControlSock); err == nil {
+				resp, err := client.Send(control.Request{Op: control.OpList})
+				_ = client.Close()
+				if err != nil {
+					return fail(exitInternal, "talk to the daemon: %v", err)
+				}
+				running = probeAll(paths, resp.Statuses)
+			}
+			// No daemon means nothing is running, which is an answer, not a
+			// failure -- and the catalogue is still worth showing.
+
+			rows := mergeSaved(running, catalogue.Tunnels)
 
 			if asJSON {
+				if rows == nil {
+					rows = []tunnel.Status{}
+				}
 				encoder := json.NewEncoder(cmd.OutOrStdout())
 				encoder.SetIndent("", "  ")
-				return encoder.Encode(statuses)
+				return encoder.Encode(rows)
 			}
-			renderTable(cmd.OutOrStdout(), statuses, useColour(cmd))
+			renderTable(cmd.OutOrStdout(), rows, useColour(cmd))
 			return nil
 		},
 	}

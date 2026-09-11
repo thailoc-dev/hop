@@ -8,22 +8,13 @@ import (
 
 func newDownCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "down <local-port>",
+		Use:   "down <name|local-port>",
 		Short: "Stop a tunnel",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
 			if !all && len(args) != 1 {
-				return fail(exitUsage, "specify a local port, or --all to stop every tunnel")
-			}
-
-			req := control.Request{Op: control.OpRemove, All: all}
-			if !all {
-				port, err := parsePort(args[0], "local-port")
-				if err != nil {
-					return err
-				}
-				req.LocalPort = port
+				return fail(exitUsage, "specify a tunnel name or local port, or --all to stop every tunnel")
 			}
 
 			paths, err := hopfs.Default()
@@ -37,6 +28,24 @@ func newDownCmd() *cobra.Command {
 				return nil
 			}
 			defer func() { _ = client.Close() }()
+
+			req := control.Request{Op: control.OpRemove, All: all}
+			if !all {
+				list, err := client.Send(control.Request{Op: control.OpList})
+				if err != nil {
+					return fail(exitInternal, "talk to the daemon: %v", err)
+				}
+				port, err := resolveTarget(paths, list.Statuses, args[0])
+				if err != nil {
+					return err
+				}
+				req.LocalPort = port
+				// The control protocol is one request per connection.
+				_ = client.Close()
+				if client, err = control.Dial(paths.ControlSock); err != nil {
+					return nil
+				}
+			}
 
 			resp, err := client.Send(req)
 			if err != nil {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net"
 	"path/filepath"
 	"strings"
@@ -84,10 +85,8 @@ func TestDownSendsRemoveForOnePort(t *testing.T) {
 		t.Fatalf("down: %v", err)
 	}
 
-	if len(h.requests) != 1 {
-		t.Fatalf("sent %d requests, want 1", len(h.requests))
-	}
-	got := h.requests[0]
+	// down lists first (to resolve a name), then removes.
+	got := h.requests[len(h.requests)-1]
 	if got.Op != control.OpRemove || got.LocalPort != 27018 || got.All {
 		t.Fatalf("request = %+v", got)
 	}
@@ -136,8 +135,10 @@ func TestRestartSendsRestartForThePort(t *testing.T) {
 		t.Fatalf("restart: %v", err)
 	}
 
-	if h.requests[0].Op != control.OpRestart || h.requests[0].LocalPort != 27018 {
-		t.Fatalf("request = %+v", h.requests[0])
+	// restart lists first (to resolve a name), then restarts.
+	last := h.requests[len(h.requests)-1]
+	if last.Op != control.OpRestart || last.LocalPort != 27018 {
+		t.Fatalf("request = %+v", last)
 	}
 }
 
@@ -190,5 +191,35 @@ func TestDaemonPathsUseTheTempHome(t *testing.T) {
 	home, p := tempHome(t)
 	if filepath.Dir(p.ControlSock) != filepath.Join(home, ".hop") {
 		t.Fatalf("control socket at %q escaped the temp home", p.ControlSock)
+	}
+}
+
+func TestLsIncludesSavedTunnelsWithoutADaemon(t *testing.T) {
+	home, p := tempHome(t)
+	saveNamed(t, p, "redis-stg", redisSpec())
+
+	out, err := runCmd(t, home, "ls")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "redis-stg") || !strings.Contains(out, "saved") {
+		t.Fatalf("saved tunnel missing from ls with no daemon:\n%s", out)
+	}
+}
+
+func TestLsJSONIncludesSavedRows(t *testing.T) {
+	home, p := tempHome(t)
+	saveNamed(t, p, "redis-stg", redisSpec())
+
+	out, err := runCmd(t, home, "ls", "--json")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	var rows []tunnel.Status
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	if len(rows) != 1 || rows[0].State != tunnel.StateSaved || rows[0].Spec.Name != "redis-stg" {
+		t.Fatalf("rows = %+v", rows)
 	}
 }

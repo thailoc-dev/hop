@@ -100,3 +100,41 @@ func TestShortDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderTableShowsNameColumnAndSavedRows(t *testing.T) {
+	named := redisSpec()
+	named.Name = "redis-stg"
+	rows := []tunnel.Status{
+		healthy(named),
+		{Spec: tunnel.Spec{Host: "example-backend-dev", Container: "app_mongo_staging",
+			RemotePort: 27017, LocalPort: 27018, Env: "dev", Name: "mongo-dev"},
+			State: tunnel.StateSaved},
+	}
+	var buf bytes.Buffer
+	renderTable(&buf, rows, false)
+	out := buf.String()
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if !strings.HasPrefix(lines[0], "NAME") {
+		t.Fatalf("header does not start with NAME: %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "redis-stg") || !strings.Contains(lines[1], "healthy") {
+		t.Fatalf("running row: %q", lines[1])
+	}
+	if !strings.Contains(lines[2], "mongo-dev") || !strings.Contains(lines[2], "saved") {
+		t.Fatalf("saved row: %q", lines[2])
+	}
+	// A saved row has no runtime: SINCE and RETRIES are dashes, not zeros.
+	if strings.HasSuffix(strings.TrimSpace(lines[2]), " 0") {
+		t.Fatalf("saved row shows a zero retry count: %q", lines[2])
+	}
+}
+
+func TestRenderTableSavedStateIsDimmedWithColour(t *testing.T) {
+	rows := []tunnel.Status{{Spec: tunnel.Spec{Name: "mongo-dev", Host: "h", Container: "c"}, State: tunnel.StateSaved}}
+	var buf bytes.Buffer
+	renderTable(&buf, rows, true)
+	if !strings.Contains(buf.String(), ansiDim+"saved"+ansiReset) {
+		t.Fatalf("saved state not dimmed:\n%q", buf.String())
+	}
+}

@@ -90,7 +90,7 @@ func renderTable(w io.Writer, statuses []tunnel.Status, colour bool) {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "LOCAL\tENV\tHOST\tCONTAINER\tREMOTE\tSTATE\tSINCE\tRETRIES")
+	fmt.Fprintln(tw, "NAME\tLOCAL\tENV\tHOST\tCONTAINER\tREMOTE\tSTATE\tSINCE\tRETRIES")
 
 	for _, st := range statuses {
 		env := st.Spec.Env
@@ -98,21 +98,29 @@ func renderTable(w io.Writer, statuses []tunnel.Status, colour bool) {
 			env = "\u2014"
 		}
 
-		since := "\u2014"
-		if st.State == tunnel.StateHealthy && !st.Since.IsZero() {
-			since = shortDuration(time.Since(st.Since))
-		}
-
+		since, retries := "\u2014", "\u2014"
 		state := string(st.State)
-		if st.State == tunnel.StateRetrying && st.LastError != "" {
+		switch st.State {
+		case tunnel.StateSaved:
+			// Not running: no runtime columns, and the state itself is muted so
+			// the eye lands on what is actually up.
 			state = paint(state, ansiDim, colour)
+		default:
+			retries = fmt.Sprintf("%d", st.Retries)
+			if st.State == tunnel.StateHealthy && !st.Since.IsZero() {
+				since = shortDuration(time.Since(st.Since))
+			}
+			if st.State == tunnel.StateRetrying && st.LastError != "" {
+				state = paint(state, ansiDim, colour)
+			}
 		}
 
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%s\t%s\t%d\n",
+		fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+			st.Spec.Name,
 			st.Spec.LocalPort,
 			paint(env, colourFor(st.Spec.Env), colour),
 			st.Spec.Host, st.Spec.Container, st.Spec.RemotePort,
-			state, since, st.Retries)
+			state, since, retries)
 	}
 	_ = tw.Flush()
 }
