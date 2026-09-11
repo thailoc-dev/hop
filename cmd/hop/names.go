@@ -163,17 +163,3 @@ func unknownNameError(name string) error {
 	}
 	return fail(exitUsage, "%s", msg)
 }
-
-func newUpCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:               "up <name>",
-		Short:             "Open a saved tunnel (explicit form of `hop <name>`)",
-		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: completeSavedNamesArg,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openSaved(cmd, args[0])
-		},
-	}
-	addTunnelFlags(cmd)
-	return cmd
-}

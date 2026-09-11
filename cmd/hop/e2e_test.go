@@ -109,20 +109,41 @@ func TestEndToEndOpenListAndStop(t *testing.T) {
 		t.Fatalf("state file missing: %v", err)
 	}
 
-	// Stopping it must empty the list and stop the daemon.
-	if out, err := runHop(t, binary, home, stubDir, "down", "45918"); err != nil {
+	// Stopping an unnamed tunnel keeps it: it is auto-named and shown as
+	// saved, and the daemon exits since nothing is running.
+	out, err = runHop(t, binary, home, stubDir, "down", "45918")
+	if err != nil {
 		t.Fatalf("down: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "app_mongo_staging-45918") {
+		t.Fatalf("down did not report the auto name:\n%s", out)
 	}
 
 	deadline = time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		listing, _ = runHop(t, binary, home, stubDir, "ls")
-		if strings.Contains(listing, "no tunnels") {
-			return
+		if strings.Contains(listing, "saved") && !strings.Contains(listing, "healthy") {
+			break
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatalf("tunnel still listed after down:\n%s", listing)
+	if !strings.Contains(listing, "app_mongo_staging-45918") || strings.Contains(listing, "healthy") {
+		t.Fatalf("after down, ls should show only the saved row:\n%s", listing)
+	}
+
+	// And start by port brings it back on the same port.
+	out, err = runHop(t, binary, home, stubDir, "start", "45918")
+	if err != nil {
+		t.Fatalf("start by port: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "45918") {
+		t.Fatalf("start output:\n%s", out)
+	}
+	_, _ = runHop(t, binary, home, stubDir, "rm", "45918")
+	listing, _ = runHop(t, binary, home, stubDir, "ls")
+	if !strings.Contains(listing, "no tunnels") {
+		t.Fatalf("after rm, ls should be empty:\n%s", listing)
+	}
 }
 
 func TestEndToEndUsageErrorsExitSixtyFour(t *testing.T) {
