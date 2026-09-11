@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/locnguyen/hop/internal/hopfs"
 	"github.com/locnguyen/hop/internal/sshconfig"
 	"github.com/locnguyen/hop/internal/sshexec"
+	"github.com/locnguyen/hop/internal/store"
+	"github.com/locnguyen/hop/internal/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -55,7 +58,8 @@ func completeTunnelArgs(_ *cobra.Command, args []string, toComplete string) ([]s
 
 	switch len(args) {
 	case 0:
-		return completeHosts(toComplete), noFiles
+		out := completeSavedNames(toComplete)
+		return append(out, completeHosts(toComplete)...), noFiles
 
 	case 1:
 		cache, executor, ok := completerCache()
@@ -147,6 +151,89 @@ func completeLocalPorts(_ *cobra.Command, _ []string, toComplete string) ([]stri
 			env = "—"
 		}
 		out = append(out, fmt.Sprintf("%s\t%s %s", port, env, status.Spec.Container))
+	}
+	return out, noFiles
+}
+
+// completeSavedNames offers catalogue entries, each described so a name is
+// recognisable without remembering what it points at.
+func completeSavedNames(toComplete string) []string {
+	paths, err := hopfs.Default()
+	if err != nil {
+		return nil
+	}
+	c, err := store.LoadCatalogue(paths.CatalogueFile)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(c.Tunnels))
+	for name := range c.Tunnels {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var out []string
+	for _, name := range names {
+		if !strings.HasPrefix(name, toComplete) {
+			continue
+		}
+		spec := c.Tunnels[name]
+		env := spec.Env
+		if env == "" {
+			env = "\u2014"
+		}
+		out = append(out, fmt.Sprintf("%s\t%s %s@%s", name, env, spec.Container, spec.Host))
+	}
+	return out
+}
+
+// completeSavedNamesArg is the cobra-shaped form, for commands whose single
+// argument is a saved name.
+func completeSavedNamesArg(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return completeSavedNames(toComplete), cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeTargets offers running tunnels for the commands that address one:
+// by name where the tunnel has one, by port otherwise.
+func completeTargets(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	const noFiles = cobra.ShellCompDirectiveNoFileComp
+
+	paths, err := hopfs.Default()
+	if err != nil {
+		return nil, noFiles
+	}
+	client, err := control.Dial(paths.ControlSock)
+	if err != nil {
+		return nil, noFiles
+	}
+	defer func() { _ = client.Close() }()
+	resp, err := client.Send(control.Request{Op: control.OpList})
+	if err != nil || !resp.OK {
+		return nil, noFiles
+	}
+
+	catalogue, _ := store.LoadCatalogue(paths.CatalogueFile)
+	rows := mergeSaved(resp.Statuses, catalogue.Tunnels)
+
+	var out []string
+	for _, st := range rows {
+		if st.State == tunnel.StateSaved {
+			continue // not running: nothing to stop, restart or read logs from
+		}
+		env := st.Spec.Env
+		if env == "" {
+			env = "\u2014"
+		}
+		if st.Spec.Name != "" {
+			if strings.HasPrefix(st.Spec.Name, toComplete) {
+				out = append(out, fmt.Sprintf("%s\t%s %s :%d", st.Spec.Name, env, st.Spec.Container, st.Spec.LocalPort))
+			}
+			continue
+		}
+		port := strconv.Itoa(st.Spec.LocalPort)
+		if strings.HasPrefix(port, toComplete) {
+			out = append(out, fmt.Sprintf("%s\t%s %s", port, env, st.Spec.Container))
+		}
 	}
 	return out, noFiles
 }

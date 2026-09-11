@@ -135,6 +135,8 @@ func openSaved(cmd *cobra.Command, name string) error {
 	if err != nil {
 		return err
 	}
+	// A daemon from an older build drops Name; the CLI knows what it asked for.
+	status.Spec.Name = name
 	if quiet, _ := cmd.Flags().GetBool("quiet"); !quiet {
 		cmd.Print(renderOpened(cmd, status))
 	}
@@ -164,9 +166,10 @@ func unknownNameError(name string) error {
 
 func newUpCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "up <name>",
-		Short: "Open a saved tunnel (explicit form of `hop <name>`)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "up <name>",
+		Short:             "Open a saved tunnel (explicit form of `hop <name>`)",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeSavedNamesArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return openSaved(cmd, args[0])
 		},

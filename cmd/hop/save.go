@@ -28,6 +28,12 @@ func newSaveCmd() *cobra.Command {
 		Long: "Saves a running tunnel so it can be reopened with `hop <name>`.\n" +
 			"With no port, the most recently opened tunnel is saved.",
 		Args: cobra.RangeArgs(1, 2),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 1 {
+				return completeLocalPorts(cmd, args, toComplete)
+			}
+			return nil, cobra.ShellCompDirectiveNoFileComp // a new name: nothing to offer
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			// Validate before contacting the daemon, so a bad name costs nothing.
@@ -90,7 +96,8 @@ func newForgetCmd() *cobra.Command {
 		Short: "Remove a saved tunnel from the catalogue",
 		Long: "Removes the name. A running instance of the tunnel keeps running;\n" +
 			"forgetting is about the future, not the present.",
-		Args: cobra.ExactArgs(1),
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeSavedNamesArg,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			paths, err := hopfs.Default()

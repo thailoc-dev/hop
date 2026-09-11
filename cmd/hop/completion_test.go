@@ -186,3 +186,65 @@ func seedCache(t *testing.T, home, host string, names ...string) {
 		t.Fatalf("seed cache: %v", err)
 	}
 }
+
+func TestCompleteSavedNamesAtPositionZero(t *testing.T) {
+	home, p := tempHome(t)
+	t.Setenv("HOME", home)
+	writeSSHConfig(t, home, "Host example-tracker-dev\n")
+	saveNamed(t, p, "redis-stg", redisSpec())
+
+	got, _ := completeTunnelArgs(&cobra.Command{}, nil, "")
+
+	var names, hosts bool
+	for _, entry := range got {
+		if strings.HasPrefix(entry, "redis-stg\t") && strings.Contains(entry, "tracker_redis_staging@example-tracker-dev") {
+			names = true
+		}
+		if entry == "example-tracker-dev" {
+			hosts = true
+		}
+	}
+	if !names {
+		t.Fatalf("saved name missing or undescribed: %v", got)
+	}
+	if !hosts {
+		t.Fatalf("hosts no longer offered alongside names: %v", got)
+	}
+}
+
+func TestCompleteTargetsPrefersNamesOverPorts(t *testing.T) {
+	home, p := tempHome(t)
+	t.Setenv("HOME", home)
+	named := redisSpec()
+	named.Name = "redis-stg"
+	unnamed := tunnel.Spec{Host: "h", Container: "c", RemotePort: 1, LocalPort: 27018}
+	serveFakeDaemon(t, p, control.Response{OK: true, Statuses: []tunnel.Status{
+		healthy(named), healthy(unnamed),
+	}})
+
+	got, _ := completeTargets(&cobra.Command{}, nil, "")
+
+	if len(got) != 2 {
+		t.Fatalf("got %v", got)
+	}
+	if !strings.HasPrefix(got[0], "redis-stg\t") {
+		t.Fatalf("named tunnel offered as %q, want its name", got[0])
+	}
+	if !strings.HasPrefix(got[1], "27018\t") {
+		t.Fatalf("unnamed tunnel offered as %q, want its port", got[1])
+	}
+}
+
+func TestForgetCompletesSavedNames(t *testing.T) {
+	home, p := tempHome(t)
+	t.Setenv("HOME", home)
+	saveNamed(t, p, "redis-stg", redisSpec())
+
+	out, err := runCmd(t, home, "__complete", "forget", "")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !slices.Contains(completionLines(out), "redis-stg") {
+		t.Fatalf("forget completion = %q", out)
+	}
+}

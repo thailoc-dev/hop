@@ -142,3 +142,70 @@ func TestEndToEndUsageErrorsExitSixtyFour(t *testing.T) {
 		t.Fatalf("exit code = %d, want 64", got)
 	}
 }
+
+func TestEndToEndNamedTunnelRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("end-to-end test spawns processes; run without -short")
+	}
+	if _, err := exec.LookPath("nc"); err != nil {
+		t.Skip("nc is required to hold the stub forward open")
+	}
+
+	binary := buildHop(t)
+	stubDir := stubSSHDir(t)
+	home := shortTempDir(t)
+	t.Cleanup(func() { _, _ = runHop(t, binary, home, stubDir, "down", "--all") })
+
+	// Open with --name: opens, then saves.
+	out, err := runHop(t, binary, home, stubDir,
+		"example-backend-dev", "app_mongo_staging", "27017", "45919", "--name", "mongo-stg")
+	if err != nil {
+		t.Fatalf("open --name: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "mongo-stg") {
+		t.Fatalf("open output lacks the name:\n%s", out)
+	}
+
+	listing, _ := runHop(t, binary, home, stubDir, "ls")
+	if !strings.Contains(listing, "mongo-stg") || !strings.Contains(listing, "45919") {
+		t.Fatalf("ls:\n%s", listing)
+	}
+
+	// down by name.
+	if out, err := runHop(t, binary, home, stubDir, "down", "mongo-stg"); err != nil {
+		t.Fatalf("down by name: %v\n%s", err, out)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		listing, _ = runHop(t, binary, home, stubDir, "ls")
+		if strings.Contains(listing, "saved") {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if !strings.Contains(listing, "saved") {
+		t.Fatalf("after down, ls should show the tunnel as saved:\n%s", listing)
+	}
+
+	// Reopen with one word, on the same port.
+	out, err = runHop(t, binary, home, stubDir, "mongo-stg")
+	if err != nil {
+		t.Fatalf("reopen by name: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "45919") {
+		t.Fatalf("reopened on a different port:\n%s", out)
+	}
+	_, _ = runHop(t, binary, home, stubDir, "down", "mongo-stg")
+
+	// forget, then the name is gone.
+	if out, err := runHop(t, binary, home, stubDir, "forget", "mongo-stg"); err != nil {
+		t.Fatalf("forget: %v\n%s", err, out)
+	}
+	out, err = runHop(t, binary, home, stubDir, "mongo-stg")
+	if err == nil {
+		t.Fatalf("forgotten name still opened:\n%s", out)
+	}
+	if !strings.Contains(out, `no saved tunnel named "mongo-stg"`) {
+		t.Fatalf("unexpected error after forget:\n%s", out)
+	}
+}

@@ -89,7 +89,7 @@ func newLogsCmd() *cobra.Command {
 			}
 		},
 	}
-	cmd.ValidArgsFunction = completeLocalPorts
+	cmd.ValidArgsFunction = completeTargets
 	cmd.Flags().BoolP("follow", "f", false, "keep printing new events")
 	cmd.Flags().IntP("lines", "n", 0, "show only the last N events")
 	return cmd

@@ -107,6 +107,9 @@ func openTunnel(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// A daemon from an older build drops Name; the CLI knows what it asked for.
+	status.Spec.Name = spec.Name
+
 	quiet, _ := cmd.Flags().GetBool("quiet")
 	if !quiet {
 		cmd.Print(renderOpened(cmd, status))

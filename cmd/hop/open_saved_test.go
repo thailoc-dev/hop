@@ -252,3 +252,41 @@ func TestSameTunnelIgnoresNameAndEnv(t *testing.T) {
 		t.Fatal("a different local port is a different tunnel")
 	}
 }
+
+// A daemon started by an older build drops the Name field it does not know
+// about, and echoes the spec back without it. The CLI knows the name it asked
+// for and must not depend on the daemon to repeat it.
+func TestOpenLineShowsTheNameEvenIfTheDaemonDropsIt(t *testing.T) {
+	home, p := tempHome(t)
+	saveNamed(t, p, "redis-stg", redisSpec())
+	h := &scriptedHandler{
+		byOp:     map[string]control.Response{control.OpList: {OK: true}},
+		afterAdd: &control.Response{OK: true, Statuses: []tunnel.Status{healthy(redisSpec())}}, // no Name
+	}
+	serveScripted(t, p, h)
+
+	out, err := runCmd(t, home, "redis-stg")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "redis-stg (tracker_redis_staging)") {
+		t.Fatalf("open line lost the name when the daemon did not echo it:\n%s", out)
+	}
+}
+
+func TestNameFlagOpenLineShowsTheNameEvenIfTheDaemonDropsIt(t *testing.T) {
+	home, p := tempHome(t)
+	h := &scriptedHandler{
+		byOp:     map[string]control.Response{control.OpList: {OK: true}},
+		afterAdd: &control.Response{OK: true, Statuses: []tunnel.Status{healthy(redisSpec())}}, // no Name
+	}
+	serveScripted(t, p, h)
+
+	out, err := runCmd(t, home, "example-tracker-dev", "tracker_redis_staging", "6379", "46379", "--name", "redis-stg")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "redis-stg (tracker_redis_staging)") {
+		t.Fatalf("open line lost the --name:\n%s", out)
+	}
+}
