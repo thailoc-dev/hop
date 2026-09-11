@@ -78,8 +78,10 @@ func tempHome(t *testing.T) (string, hopfs.Paths) {
 }
 
 func TestDownSendsRemoveForOnePort(t *testing.T) {
+	// down is stop: it consults the running list, then removes that forward.
 	home, p := tempHome(t)
-	h := serveFakeDaemon(t, p, control.Response{OK: true})
+	running := tunnel.Spec{Host: "h", Container: "c", RemotePort: 27017, LocalPort: 27018}
+	h := serveFakeDaemon(t, p, control.Response{OK: true, Statuses: []tunnel.Status{healthy(running)}})
 
 	if _, err := runCmd(t, home, "down", "27018"); err != nil {
 		t.Fatalf("down: %v", err)
@@ -92,16 +94,26 @@ func TestDownSendsRemoveForOnePort(t *testing.T) {
 	}
 }
 
-func TestDownAllSendsTheAllFlag(t *testing.T) {
+func TestDownAllStopsEachRunningTunnel(t *testing.T) {
+	// stop --all removes each forward individually, because each unnamed one
+	// must be named and saved on its way out.
 	home, p := tempHome(t)
-	h := serveFakeDaemon(t, p, control.Response{OK: true})
+	a := tunnel.Spec{Host: "h", Container: "a", RemotePort: 1, LocalPort: 27018}
+	b := tunnel.Spec{Host: "h", Container: "b", RemotePort: 2, LocalPort: 27019}
+	h := serveFakeDaemon(t, p, control.Response{OK: true, Statuses: []tunnel.Status{healthy(a), healthy(b)}})
 
 	if _, err := runCmd(t, home, "down", "--all"); err != nil {
 		t.Fatalf("down --all: %v", err)
 	}
 
-	if !h.requests[0].All {
-		t.Fatalf("request = %+v, want All", h.requests[0])
+	removed := map[int]bool{}
+	for _, r := range h.requests {
+		if r.Op == control.OpRemove {
+			removed[r.LocalPort] = true
+		}
+	}
+	if !removed[27018] || !removed[27019] {
+		t.Fatalf("removed %v, want both ports", removed)
 	}
 }
 
@@ -129,7 +141,8 @@ func TestDownWithNoDaemonIsNotAnError(t *testing.T) {
 
 func TestRestartSendsRestartForThePort(t *testing.T) {
 	home, p := tempHome(t)
-	h := serveFakeDaemon(t, p, control.Response{OK: true})
+	running := tunnel.Spec{Host: "h", Container: "c", RemotePort: 27017, LocalPort: 27018}
+	h := serveFakeDaemon(t, p, control.Response{OK: true, Statuses: []tunnel.Status{healthy(running)}})
 
 	if _, err := runCmd(t, home, "restart", "27018"); err != nil {
 		t.Fatalf("restart: %v", err)

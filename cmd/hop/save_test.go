@@ -136,16 +136,20 @@ func TestForgetUnknownNameIsAnError(t *testing.T) {
 	}
 }
 
-func TestForgetDoesNotTouchTheDaemon(t *testing.T) {
+func TestForgetDoesNotStopAnythingWhenNothingIsRunning(t *testing.T) {
+	// rm consults the running list (it must stop a running instance), but
+	// with nothing running it must not send a remove.
 	home, p := tempHome(t)
 	saveNamed(t, p, "redis-stg", redisSpec())
-	h := &scriptedHandler{}
+	h := &scriptedHandler{byOp: map[string]control.Response{control.OpList: {OK: true}}}
 	serveScripted(t, p, h)
 
 	_, _ = runCmd(t, home, "forget", "redis-stg")
 
-	if len(h.requests) != 0 {
-		t.Fatalf("forget sent %v to the daemon", h.ops())
+	for _, op := range h.ops() {
+		if op == control.OpRemove {
+			t.Fatalf("sent a remove with nothing running; ops %v", h.ops())
+		}
 	}
 }
 

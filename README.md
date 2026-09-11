@@ -121,7 +121,35 @@ stops the tunnel.
 | `--env <name>` | inferred | Environment label: `dev`, `stg`, `prod` |
 | `--wait <dur>` | `10s` | How long to wait for the tunnel to become healthy |
 
-### Save it under a name
+### Stop, start, remove — like docker
+
+The lifecycle verbs work the way `docker stop` / `start` / `rm` do: **stop
+keeps the tunnel** so you can start it again, and only `rm` deletes it.
+
+```bash
+hop stop redis-stg            # kill the ssh forward; the tunnel stays in `hop ls` as "saved"
+hop start redis-stg           # open a new forward to the same place, same local port
+hop restart redis-stg         # rebuild a running one, or start a stopped one
+hop rm redis-stg              # delete it (stopping it first if it is running)
+```
+
+All four accept a name or a local port. `down`, `up` and `forget` are aliases
+of `stop`, `start` and `rm`.
+
+This is about the **ssh forward on your machine**. Nothing on the remote host
+is started, stopped or removed — the only docker commands hop ever runs are
+`docker inspect` and `docker ps`, both read-only.
+
+An unnamed tunnel is **named automatically when you stop it** — from its
+container and port, e.g. `tracker_redis_staging-46379` — so it is never lost:
+
+```
+$ hop example-tracker-dev tracker_redis_staging 6379 46379
+$ hop stop 46379
+stopped; saved as tracker_redis_staging-46379  (hop start tracker_redis_staging-46379)
+```
+
+### Give it a name
 
 ```bash
 hop example-tracker-dev tracker_redis_staging 6379 46379 --name redis-stg
@@ -129,27 +157,24 @@ hop example-tracker-dev tracker_redis_staging 6379 46379 --name redis-stg
 hop save redis-stg            # names the most recently opened tunnel
 hop save redis-stg 46379      # or a specific one
 
-hop redis-stg                 # from now on
-hop up redis-stg              # same thing, explicit
-hop forget redis-stg          # remove the name; a running instance keeps running
+hop redis-stg                 # from now on — same as `hop start redis-stg`
 ```
 
 Names are lower-case letters, digits, `-` and `_`, and must contain a
 non-digit so they can never be mistaken for a port. Saving an existing name
 overwrites it — that is how you change a saved tunnel's ports.
 
-`down`, `logs` and `restart` accept a name wherever they accept a port, and
-`hop ls` shows saved tunnels that are not running as `saved` rows.
-
 ### Manage tunnels
 
 | Command | Does |
 |---|---|
-| `hop ls` | List tunnels, dialling each port to report the truth |
-| `hop down <name\|port>` | Stop one tunnel |
-| `hop down --all` | Stop every tunnel |
+| `hop ls` | List tunnels — running and stopped — dialling each running port to report the truth |
+| `hop stop <name\|port>` | Stop the ssh forward; the tunnel is kept (alias: `down`) |
+| `hop stop --all` | Stop every tunnel, keeping all of them |
+| `hop start <name\|port>` | Start a stopped tunnel (alias: `up`) |
+| `hop restart <name\|port>` | Rebuild a running tunnel, or start a stopped one |
+| `hop rm <name\|port>` | Remove a tunnel, stopping it first (alias: `forget`) |
 | `hop logs <name\|port> [-f]` | Show state transitions |
-| `hop restart <name\|port>` | Rebuild it, re-resolving the container address |
 
 Tunnels are addressed by **local port** — it is unique per tunnel, and it is
 the number you type into your database client anyway.
@@ -185,7 +210,7 @@ and that is fixed by making it obvious, not by asking.
 
 Completion covers hosts (from `~/.ssh/config`), container names and their ports
 (from `docker ps` on the host), and the local ports of running tunnels for
-`down`, `logs` and `restart` — each annotated with its environment and
+`stop`, `logs` and `restart` — each annotated with its environment and
 container.
 
 **The first Tab on a host you have not completed recently shows a message

@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/thailoc-dev/hop/internal/control"
 	"github.com/thailoc-dev/hop/internal/hopfs"
-	"github.com/thailoc-dev/hop/internal/store"
 	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
@@ -86,33 +85,6 @@ func newSaveCmd() *cobra.Command {
 					chosen.Spec.Host, chosen.Spec.Container, chosen.Spec.RemotePort, chosen.Spec.LocalPort)
 			}
 			return nil
-		},
-	}
-}
-
-func newForgetCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "forget <name>",
-		Short: "Remove a saved tunnel from the catalogue",
-		Long: "Removes the name. A running instance of the tunnel keeps running;\n" +
-			"forgetting is about the future, not the present.",
-		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: completeSavedNamesArg,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			paths, err := hopfs.Default()
-			if err != nil {
-				return err
-			}
-			c, err := store.LoadCatalogue(paths.CatalogueFile)
-			if err != nil {
-				return err
-			}
-			if _, ok := c.Tunnels[name]; !ok {
-				return fail(exitUsage, "no saved tunnel named %q", name)
-			}
-			delete(c.Tunnels, name)
-			return store.SaveCatalogue(paths.CatalogueFile, c)
 		},
 	}
 }

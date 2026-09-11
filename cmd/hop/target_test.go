@@ -114,9 +114,15 @@ func TestLogsAcceptsAName(t *testing.T) {
 }
 
 func TestDownByNameWithNoDaemonIsNotAnError(t *testing.T) {
-	home, _ := tempHome(t)
-	if _, err := runCmd(t, home, "down", "redis-stg"); err != nil {
+	// A saved tunnel that is not running is already in the requested state.
+	home, p := tempHome(t)
+	saveNamed(t, p, "redis-stg", redisSpec())
+	out, err := runCmd(t, home, "down", "redis-stg")
+	if err != nil {
 		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(out, "already stopped") {
+		t.Fatalf("out = %q", out)
 	}
 }
 

@@ -18,14 +18,14 @@ import (
 // hostname. See the spec's disambiguation rule.
 var reservedWords = map[string]bool{
 	"ls": true, "down": true, "logs": true, "restart": true, "tunnel": true,
-	"up": true, "save": true, "forget": true,
+	"up": true, "save": true, "forget": true, "stop": true, "start": true, "rm": true,
 	"run": true, "shell": true, "push": true, "pull": true, "docker-ip": true,
 	"version": true, "help": true, "completion": true,
 }
 
 const usageForms = "hop <name>                                         open a saved tunnel\n" +
 	"       hop <host> <container> <remote-port> <local-port>   open a tunnel\n" +
-	"       hop ls | down <name|port> | logs <name|port> | restart <name|port>"
+	"       hop ls | stop <name|port> | start <name|port> | rm <name|port>"
 
 func parsePort(value, name string) (int, error) {
 	port, err := strconv.Atoi(value)
