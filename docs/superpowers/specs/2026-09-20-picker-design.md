@@ -115,8 +115,11 @@ Then an optional name, validated with the same rules as `--name`; `Enter` on
 an empty field skips it.
 
 `Enter` opens the tunnel through **the same code path as the four-argument
-form** — `openTunnel` with the assembled spec and flags — so the health wait,
-the `--name` save, the environment inference and the printed open line are
+form**. Today `openTunnel` parses arguments and then opens; it is split into
+`parseTunnelArgs` (existing) and a new `openSpec(cmd, spec)` that takes an
+assembled spec, and the picker calls the latter. The health wait, the
+`--name` save, the environment inference (applied to the assembled spec
+exactly as the parser applies it) and the printed open line are therefore
 identical to typing it out.
 
 ### After
@@ -130,7 +133,7 @@ Exit codes are the open's exit codes.
 | Unit | Responsibility |
 |---|---|
 | `internal/picker` | The Bubble Tea model: stages, filtering, key handling, view. Pure over injected data sources; no I/O of its own. |
-| `internal/picker/sources.go` | The data the model needs, as an interface: saved tunnels, hosts, containers-for-host (with a context), free-port. One real implementation in `cmd/hop`, one fake in tests. |
+| `internal/picker/sources.go` | The data the model needs, as an interface: saved tunnels, hosts, containers-for-host (with a context), whether a local port is free, and a free port from the OS. One real implementation in `cmd/hop`, one fake in tests. |
 | `cmd/hop/pick.go` | Wires sources to the real catalogue, ssh config, executor and cache; runs the program; hands the result to `openTunnel`. Decides TTY-or-help. |
 
 The model's `Update` takes messages and returns a new model, so a test drives
