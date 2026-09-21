@@ -40,6 +40,30 @@ func (m Model) View() string {
 		fmt.Fprintf(&b, "  %s%s\n", styleTitle.Render("Tunnels"), m.filterHint())
 		m.renderList(&b, "nothing to open: no saved tunnels, no ssh hosts")
 		b.WriteString(styleDim.Render("  ↑↓ move   enter open   esc quit") + "\n")
+	case StageRemotePort:
+		fmt.Fprintf(&b, "  %s › %s › %s%s\n",
+			styleTitle.Render("Tunnels"), m.host, m.container.Name, m.filterHint())
+		m.renderList(&b, "no known ports — type one")
+		if m.inputErr != "" {
+			fmt.Fprintf(&b, "  %s\n", styleErr.Render(m.inputErr))
+		}
+		b.WriteString(styleDim.Render("  ↑↓ move   enter choose   esc back") + "\n")
+	case StageLocalPort, StageName:
+		fmt.Fprintf(&b, "  %s › %s › %s › :%d\n",
+			styleTitle.Render("Tunnels"), m.host, m.container.Name, m.remote)
+		label := "local port"
+		if m.stage == StageName {
+			label = "name      "
+		}
+		fmt.Fprintf(&b, "  %s  %s\n", styleDim.Render(label), m.input.View())
+		if m.inputErr != "" {
+			fmt.Fprintf(&b, "  %s\n", styleErr.Render(m.inputErr))
+		}
+		hint := "  enter continue   tab free port   esc back"
+		if m.stage == StageName {
+			hint = "  enter open (empty = no name)   esc back"
+		}
+		b.WriteString(styleDim.Render(hint) + "\n")
 	default:
 		fmt.Fprintf(&b, "  %s › %s%s\n", styleTitle.Render("Tunnels"), m.host, m.filterHint())
 		if m.fetching {

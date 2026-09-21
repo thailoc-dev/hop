@@ -323,10 +323,119 @@ func (m Model) chooseContainer(c complete.Container) Model {
 	return m
 }
 
-// Stages 3-5 are implemented in the next task.
-func (m Model) updateRemotePort(msg tea.KeyMsg) (tea.Model, tea.Cmd) { return m, nil }
-func (m Model) updateLocalPort(msg tea.KeyMsg) (tea.Model, tea.Cmd)  { return m, nil }
-func (m Model) updateName(msg tea.KeyMsg) (tea.Model, tea.Cmd)       { return m, nil }
+// parsePort is stricter than Atoi: a port is 1..65535.
+func parsePort(s string) (int, bool) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > 65535 {
+		return 0, false
+	}
+	return n, true
+}
+
+func (m Model) updateRemotePort(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if next, ok := m.listKeys(msg); ok {
+		next.inputErr = ""
+		return next, nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.stage = StageContainer
+		m.filter, m.cursor, m.inputErr = "", 0, ""
+		m.all = nil
+		for _, c := range m.known {
+			m.all = append(m.all, Item{Kind: ItemContainer, Label: c.Name, Container: c})
+		}
+		return m, nil
+	case tea.KeyEnter:
+		if it, ok := m.selected(); ok && it.Kind == ItemPort {
+			return m.chooseRemote(it.Port), nil
+		}
+		if p, ok := parsePort(m.filter); ok {
+			return m.chooseRemote(p), nil
+		}
+		m.inputErr = "type a port between 1 and 65535, or pick one"
+	}
+	return m, nil
+}
+
+func (m Model) chooseRemote(p int) Model {
+	m.remote = p
+	m.stage = StageLocalPort
+	m.filter, m.cursor, m.inputErr = "", 0, ""
+	m.input = textinput.New()
+	m.input.CharLimit = 5
+	m.input.SetValue(strconv.Itoa(p))
+	m.input.Focus()
+	m.freshInput = true // first keystroke replaces the prefill
+	return m
+}
+
+func (m Model) updateLocalPort(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.stage = StageRemotePort
+		m.inputErr = ""
+		return m, nil
+	case tea.KeyTab:
+		if p, err := m.src.FreePort(); err == nil {
+			m.input.SetValue(strconv.Itoa(p))
+			m.freshInput = false
+		}
+		return m, nil
+	case tea.KeyEnter:
+		p, ok := parsePort(m.input.Value())
+		if !ok {
+			m.inputErr = "a local port is a number between 1 and 65535"
+			return m, nil
+		}
+		if !m.src.PortFree(p) {
+			m.inputErr = fmt.Sprintf("local port %d is in use — try another, or tab for a free one", p)
+			return m, nil
+		}
+		m.local = p
+		m.stage = StageName
+		m.inputErr = ""
+		m.input = textinput.New()
+		m.input.CharLimit = 40
+		m.input.Placeholder = "name (optional)"
+		m.input.Focus()
+		return m, nil
+	case tea.KeyRunes:
+		if m.freshInput {
+			m.input.SetValue("")
+			m.freshInput = false
+		}
+	}
+	m.inputErr = ""
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
+
+func (m Model) updateName(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		return m.chooseRemote(m.remote), nil // back to local port, prefilled again
+	case tea.KeyEnter:
+		name := m.input.Value()
+		if name != "" {
+			if err := m.src.ValidateName(name); err != nil {
+				m.inputErr = err.Error()
+				return m, nil
+			}
+		}
+		m.result = Result{Spec: tunnel.Spec{
+			Host: m.host, Container: m.container.Name,
+			RemotePort: m.remote, LocalPort: m.local, Name: name,
+		}}
+		m.done = true
+		return m, tea.Quit
+	}
+	m.inputErr = ""
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
+}
 
 func (m Model) backToTarget() Model {
 	m.stage = StageTarget
