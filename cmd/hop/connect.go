@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -136,6 +137,7 @@ func spawnDaemon(paths hopfs.Paths) error {
 	}
 	defer func() { _ = logFile.Close() }()
 
+	markInheritedCloseOnExec()
 	cmd := exec.Command(self, "__daemon")
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	cmd.Stdin = nil
@@ -164,6 +166,7 @@ func spawnWarm(host string) {
 		return
 	}
 
+	markInheritedCloseOnExec()
 	cmd := exec.Command(self, "__warm", host)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
@@ -172,4 +175,30 @@ func spawnWarm(host string) {
 		return
 	}
 	_ = cmd.Process.Release()
+}
+
+// markInheritedCloseOnExec flags every descriptor above stderr close-on-exec,
+// so a detached child starts with nothing but the three it is given.
+//
+// Go already marks the descriptors it opens; the ones at risk arrived from
+// whoever ran hop -- a shell's spare descriptors, a harness's output pipe --
+// and exec only replaces 0, 1 and 2. A daemon holding such a pipe open keeps
+// its reader waiting for an EOF that never comes, and would pass it on to
+// every ssh it spawns. Enumerating /dev/fd works on macOS and Linux alike;
+// if it cannot be read there is nothing to fix. Names only: os.ReadDir would
+// stat each entry and fail on the directory's own descriptor on macOS.
+func markInheritedCloseOnExec() {
+	dir, err := os.Open("/dev/fd")
+	if err != nil {
+		return
+	}
+	names, _ := dir.Readdirnames(-1)
+	_ = dir.Close()
+	for _, name := range names {
+		fd, err := strconv.Atoi(name)
+		if err != nil || fd <= 2 {
+			continue
+		}
+		syscall.CloseOnExec(fd)
+	}
 }

@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/thailoc-dev/hop/internal/control"
 	"github.com/thailoc-dev/hop/internal/hopfs"
@@ -184,5 +187,31 @@ func TestDaemonLogPathIsInsideTheHopRoot(t *testing.T) {
 	p := tempPaths(t)
 	if got := filepath.Dir(p.DaemonLog); got != p.Root {
 		t.Fatalf("daemon log at %q, want it under %q", p.DaemonLog, p.Root)
+	}
+}
+
+// A descriptor that arrived from hop's parent without close-on-exec would
+// otherwise flow into the detached daemon and on into ssh, where a pipe's
+// reader waits forever for an EOF that never comes.
+func TestDetachedChildrenInheritNoStrayDescriptors(t *testing.T) {
+	var fds [2]int
+	if err := syscall.Pipe(fds[:]); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = syscall.Close(fds[0]); _ = syscall.Close(fds[1]) }()
+	// Go marks its own descriptors close-on-exec; undo that to fake one
+	// inherited from a shell or a test harness.
+	if _, err := unix.FcntlInt(uintptr(fds[1]), unix.F_SETFD, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	markInheritedCloseOnExec()
+
+	flags, err := unix.FcntlInt(uintptr(fds[1]), unix.F_GETFD, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flags&unix.FD_CLOEXEC == 0 {
+		t.Fatalf("fd %d is still inheritable across exec", fds[1])
 	}
 }
