@@ -31,7 +31,8 @@ rebuilds affected tunnels immediately.
 ## Install
 
 **Requirements:** macOS and an `ssh` that reads `~/.ssh/config`. Building
-needs Go 1.25; `cobra` is the only dependency.
+needs Go 1.25. Dependencies: `cobra`, and Bubble Tea (`bubbletea`, `bubbles`,
+`lipgloss`) for the picker.
 
 ### 1. Get Go
 
@@ -104,6 +105,31 @@ mkdir -p ~/.zfunc && hop completion zsh > ~/.zfunc/_hop
 `bash` and `fish` are also supported: `hop completion bash`, `hop completion fish`.
 
 ## Usage
+
+### Just type `hop`
+
+With no arguments, on a terminal, `hop` shows what you have and lets you
+pick — saved tunnels first, then hosts:
+
+```
+$ hop
+  Tunnels                                          type to filter…
+› redis-stg    stg   tracker_redis_staging   :46379   saved
+  mongo-dev    dev   app_mongo_staging       :27018   healthy
+  ── hosts ──
+  example-backend-dev
+  example-tracker-dev
+
+  ↑↓ move   enter open   esc quit
+```
+
+`Enter` on a saved tunnel opens it: two keystrokes for the thing you do most.
+`Enter` on a host walks through its containers (fetched live, with a spinner),
+the container's ports, a local port (`Tab` fills a free one), and an optional
+name — then opens exactly as if you had typed it out. Type to filter any list;
+`Esc` goes back a stage, or quits from the first one.
+
+In a pipe or a script, `hop` with no arguments prints help, as before.
 
 ### Open a tunnel
 
@@ -277,6 +303,7 @@ invokes `ssh <host>`, everything configured there applies — including
 | `internal/hopfs` | Every path hop reads or writes. |
 | `internal/sshconfig` | Read-only `~/.ssh/config` alias parser, for completion. |
 | `internal/complete` | Completion data: `docker ps` parsing, the timeout, the cache. |
+| `internal/picker` | The interactive picker: stages, filtering, keys. Pure over a sources interface. |
 | `cmd/hop` | Argument parsing, rendering, daemon spawn. |
 
 Process spawning is confined to `sshexec`, `sysprobe`, and `cmd/hop/connect.go`

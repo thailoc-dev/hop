@@ -7,6 +7,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/thailoc-dev/hop/internal/hopfs"
+	"github.com/thailoc-dev/hop/internal/store"
+	"github.com/thailoc-dev/hop/internal/tunnel"
 )
 
 // buildHop compiles the binary under test.
@@ -228,5 +232,62 @@ func TestEndToEndNamedTunnelRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(out, `no saved tunnel named "mongo-stg"`) {
 		t.Fatalf("unexpected error after forget:\n%s", out)
+	}
+}
+
+// The picker needs a pty. expect ships with macOS, so drive the real binary
+// through it: seed one saved tunnel, run `hop`, press Enter, and the tunnel
+// must open through the same path the argument form uses.
+func TestEndToEndPickerOpensASavedTunnel(t *testing.T) {
+	if testing.Short() {
+		t.Skip("end-to-end test spawns processes; run without -short")
+	}
+	if _, err := exec.LookPath("expect"); err != nil {
+		t.Skip("expect is required to drive a pty")
+	}
+	if _, err := exec.LookPath("nc"); err != nil {
+		t.Skip("nc is required to hold the stub forward open")
+	}
+
+	binary := buildHop(t)
+	stubDir := stubSSHDir(t)
+	home := shortTempDir(t)
+	t.Cleanup(func() { _, _ = runHop(t, binary, home, stubDir, "down", "--all") })
+
+	paths := hopfs.New(home, os.Getuid())
+	if err := paths.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveCatalogue(paths.CatalogueFile, store.Catalogue{Tunnels: map[string]tunnel.Spec{
+		"mongo-stg": {Host: "example-backend-dev", Container: "app_mongo_staging", RemotePort: 27017, LocalPort: 45921, Env: "stg"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	script := `
+set timeout 20
+spawn env HOME=` + home + ` PATH=` + stubDir + `:$env(PATH) NO_COLOR=1 ` + binary + `
+expect {
+  "mongo-stg" { send "\r" }
+  timeout { puts "PICKER_NEVER_SHOWED"; exit 2 }
+}
+expect {
+  "healthy" { puts "OPENED" }
+  timeout { puts "NEVER_HEALTHY"; exit 3 }
+}
+expect eof
+`
+	cmd := exec.Command("expect", "-c", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expect: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "OPENED") {
+		t.Fatalf("picker did not open the tunnel:\n%s", out)
+	}
+
+	listing, _ := runHop(t, binary, home, stubDir, "ls")
+	if !strings.Contains(listing, "45921") || !strings.Contains(listing, "healthy") {
+		t.Fatalf("after the picker, ls:\n%s", listing)
 	}
 }
