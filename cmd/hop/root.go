@@ -15,6 +15,9 @@ func newRootCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch len(args) {
 			case 0:
+				if isTerminal() {
+					return runPicker(cmd)
+				}
 				return cmd.Help()
 			case 1:
 				return openSaved(cmd, args[0])

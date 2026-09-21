@@ -64,23 +64,38 @@ func parseTunnelArgs(args []string) (tunnel.Spec, error) {
 }
 
 // openTunnel is the body of both the bare form and `hop tunnel`.
+// openTunnel is the four-argument form: parse, then open.
 func openTunnel(cmd *cobra.Command, args []string) error {
 	spec, err := parseTunnelArgs(args)
 	if err != nil {
 		return err
 	}
+	return openSpec(cmd, spec)
+}
+
+// openSpec opens an assembled spec. It is the one open path: the
+// four-argument form, `hop <name>` after catalogue lookup, and the picker all
+// end here, so the health wait, the --name save and the printed line cannot
+// drift apart.
+func openSpec(cmd *cobra.Command, spec tunnel.Spec) error {
+	if spec.Env == "" {
+		spec.Env = inferEnv(spec.Host, spec.Container)
+	}
 	if override, _ := cmd.Flags().GetString("env"); override != "" {
 		spec.Env = override
 	}
 
-	// --name is open-then-save. Validate first so a bad name has no side
-	// effects; save after the open succeeds so a failed open saves nothing.
-	name, _ := cmd.Flags().GetString("name")
+	// A name -- from --name or already on the spec -- is open-then-save.
+	// Validate first so a bad name has no side effects; save after the open
+	// succeeds so a failed open saves nothing.
+	if flagName, _ := cmd.Flags().GetString("name"); flagName != "" {
+		spec.Name = flagName
+	}
+	name := spec.Name
 	if name != "" {
 		if err := validateName(name); err != nil {
 			return err
 		}
-		spec.Name = name
 	}
 
 	paths, err := hopfs.Default()
