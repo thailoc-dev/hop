@@ -292,14 +292,38 @@ func (m Model) receiveContainers(msg containersMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// Stages 2-5 are implemented in later tasks. Until then they only honour
-// Esc, so the package compiles and stage 1 is testable on its own.
 func (m Model) updateContainer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyEsc {
+	if next, ok := m.listKeys(msg); ok {
+		return next, nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
 		return m.backToTarget(), nil
+	case tea.KeyEnter:
+		if it, ok := m.selected(); ok && it.Kind == ItemContainer {
+			return m.chooseContainer(it.Container), nil
+		}
+		// No list row: the fetch failed or nothing matched. A typed name is
+		// still a valid choice -- the host may be reachable but slow.
+		if !m.fetching && m.filter != "" {
+			return m.chooseContainer(complete.Container{Name: m.filter}), nil
+		}
 	}
 	return m, nil
 }
+
+func (m Model) chooseContainer(c complete.Container) Model {
+	m.container = c
+	m.stage = StageRemotePort
+	m.filter, m.cursor = "", 0
+	m.all = nil
+	for _, p := range c.Ports {
+		m.all = append(m.all, Item{Kind: ItemPort, Label: portLabel(p), Port: p})
+	}
+	return m
+}
+
+// Stages 3-5 are implemented in the next task.
 func (m Model) updateRemotePort(msg tea.KeyMsg) (tea.Model, tea.Cmd) { return m, nil }
 func (m Model) updateLocalPort(msg tea.KeyMsg) (tea.Model, tea.Cmd)  { return m, nil }
 func (m Model) updateName(msg tea.KeyMsg) (tea.Model, tea.Cmd)       { return m, nil }
