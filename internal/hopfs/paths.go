@@ -8,13 +8,14 @@ import (
 	"path/filepath"
 )
 
-// socketBudget is the usable length of a unix socket path.
+// SocketBudget is the usable length of a unix socket path, which doctor
+// reports against.
 //
 // sun_path is 104 bytes on darwin. While establishing a ControlMaster, ssh
 // binds an intermediate socket by appending a 17-byte random suffix to the
 // path it was given, so the path hop supplies must leave room for it:
 // 104 - 17 - 1 (NUL) = 86.
-const socketBudget = 86
+const SocketBudget = 86
 
 // longestSocketName is the longest basename hopfs will place in SocketDir:
 // "cmd-" + 16 hex characters + ".sock".
@@ -39,7 +40,7 @@ func New(home string, uid int) Paths {
 	root := filepath.Join(home, ".hop")
 
 	socketDir := filepath.Join(root, "ctl")
-	if len(filepath.Join(socketDir, longestSocketName)) > socketBudget {
+	if len(filepath.Join(socketDir, longestSocketName)) > SocketBudget {
 		socketDir = fmt.Sprintf("/tmp/hop-%d", uid)
 	}
 

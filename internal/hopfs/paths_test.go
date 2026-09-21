@@ -42,8 +42,8 @@ func TestSocketBudgetIs86Bytes(t *testing.T) {
 	// cmd-<16 hex>.sock is 25 bytes, plus the separator.
 	dir := "/Users/x/.hop/ctl"
 	longest := filepath.Join(dir, "cmd-0123456789abcdef.sock")
-	if len(longest) > socketBudget {
-		t.Fatalf("test premise wrong: %d > %d", len(longest), socketBudget)
+	if len(longest) > SocketBudget {
+		t.Fatalf("test premise wrong: %d > %d", len(longest), SocketBudget)
 	}
 	if got := New("/Users/x", 501).SocketDir; got != dir {
 		t.Fatalf("SocketDir = %q, want %q", got, dir)

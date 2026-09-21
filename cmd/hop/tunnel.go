@@ -20,7 +20,7 @@ var reservedWords = map[string]bool{
 	"ls": true, "down": true, "logs": true, "restart": true, "tunnel": true,
 	"up": true, "save": true, "forget": true, "stop": true, "start": true, "rm": true,
 	"run": true, "shell": true, "push": true, "pull": true, "docker-ip": true,
-	"version": true, "help": true, "completion": true,
+	"version": true, "help": true, "completion": true, "doctor": true,
 }
 
 const usageForms = "hop <name>                                         open a saved tunnel\n" +

@@ -32,7 +32,7 @@ func newRootCmd() *cobra.Command {
 	addTunnelFlags(root)
 	root.ValidArgsFunction = completeTunnelArgs
 
-	root.AddCommand(newVersionCmd())
+	root.AddCommand(newVersionCmd(), newDoctorCmd())
 	root.AddCommand(newDaemonCmd())
 	root.AddCommand(newWarmCmd())
 	root.AddCommand(newTunnelCmd())

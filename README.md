@@ -205,6 +205,34 @@ overwrites it — that is how you change a saved tunnel's ports.
 Tunnels are addressed by **local port** — it is unique per tunnel, and it is
 the number you type into your database client anyway.
 
+### When something is off: `hop doctor`
+
+```
+$ hop doctor
+✓ hop         v0.5.0 at ~/.local/bin/hop
+✓ ssh         /usr/bin/ssh, ~/.ssh/config has 3 hosts
+✓ lsof        found (port ownership and orphan detection work)
+✓ ~/.hop      state.json ok, 2 saved tunnels, cache 2 hosts, log 12 KB
+✓ socket      /Users/me/.hop/ctl.sock (24 bytes of 86 budget)
+✓ daemon      running, 1 healthy
+! ports       redis-stg: 46379 is held by redis-server (pid 4242)
+✓ completion  zsh: ~/.zshrc sources hop completion
+
+✓ example-backend-dev  docker ps ok, 8 containers (1.1s)
+✗ example-tracker-dev  ssh: no answer within 5s
+
+1 problem, 1 warning
+```
+
+It checks the things that explain most "why doesn't it work" moments: that the
+`hop` on PATH is the one you just built, that `ssh` and `lsof` exist, that the
+`~/.hop` files parse (and whether one was set aside as `.corrupt`), the control
+socket's path budget, whether the daemon answers, whether a saved tunnel's
+local port is held by something else, whether zsh completion is wired up — and
+then one `docker ps` on each host your saved tunnels use, one at a time, 5s
+each. `--offline` skips the hosts. Exit 1 means something is broken; warnings
+are advice.
+
 ### Passthrough commands
 
 These are thin `ssh`/`scp` wrappers with no supervision, kept so that `hop`
